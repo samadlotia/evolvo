@@ -1,58 +1,37 @@
 (ns BasicIncloadServer.core)
 
-(use 'cheshire.core)
+(use '[ring.adapter.jetty :only [run-jetty]])
+(use '[ring.middleware.params :only [wrap-params]])
+(use '[ring.util.response :only [not-found]])
+(use '[cheshire.core :only [parse-stream]])
+(use '[clojure.java.io :only [reader]])
 
-(def network
-  '[[d b]
-    [a b]
-    [b c]
-    [d j]
-    [a g]
-    [e c]
-    [g j]
-    [g e]
-    [e f]
-    [j k]
-    [k e]
-    [k h]
-    [e i]
-    [f i]
-    [j o]
-    [e n]
-    [k l]
-    [h l]
-    [h i]
-    [o n]
-    [i m]
-    [c f]
-    [b k]])
+(require 'BasicIncloadServer.expand_from_node)
+(require 'BasicIncloadServer.expand_from_all_nodes)
 
-(def root-nodes (set '[a b c d]))
+(def services
+  {"expand_from_node" #'BasicIncloadServer.expand_from_node/respond
+   "expand_from_all_nodes" #'BasicIncloadServer.expand_from_all_nodes/respond })
 
-(defn edges-between [nodes]
-  (let [is-edge-in-nodes (fn [[src trg]] (and (contains? nodes src) (contains? nodes trg)))]
-    (filter is-edge-in-nodes network)))
-
-(defn adj-edges [node]
-  (let [is-node-in-edge (fn [[src trg]] (or (= node src) (= node trg)))]
-    (filter is-node-in-edge network)))
-
-(defn adj-nodes [node adj-edges]
-  (let [opposite-node (fn [[src trg]] (if (= node src) trg src))]
-    (map opposite-node adj-edges)))
-
-(defn json-response [response]
-  {:status 200
-   :headers {"Content-Type" "application/json"}
-   :body (generate-string response)})
+(defn service-meta-info [service-sym]
+  (select-keys (meta service-sym) [:input-type :output-type]))
 
 (defn handler [request]
-  (json-response 
-    (let [path (clojure.string/split (:uri request) #"\/+")]
-      (if (= (count path) 0)
-        {"nodes" root-nodes
-         "edges" (edges-between root-nodes)}
-        (let [node (symbol (path 1))
-              adj-edges-to-node (adj-edges node)]
-          {"nodes" (adj-nodes node adj-edges-to-node)
-           "edges" adj-edges-to-node})))))
+  (let [path (rest (clojure.string/split (:uri request) #"\/+"))]
+    (if (nil? path)
+      (not-found "no method specified")
+      (let [service-name   (first path)
+            service-params (if (= (:request-method request) :post)
+                             (parse-stream (reader (:body request)))
+                             (:query-params request))]
+        (if (contains? services service-name)
+          (let [service (get services service-name)]
+            (service service-params))
+          (not-found "invalid method"))))))
+
+(def app
+  (->> handler
+    (wrap-params)))
+
+(defn -main []
+  (ring.adapter.jetty/run-jetty app {:port 8000 :join? false}))
