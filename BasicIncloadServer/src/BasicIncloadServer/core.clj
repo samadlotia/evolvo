@@ -8,10 +8,13 @@
 
 (require 'BasicIncloadServer.expand_from_node)
 (require 'BasicIncloadServer.expand_from_all_nodes)
+(require 'BasicIncloadServer.expand_and_replace)
 
 (def services
-  {"expand_from_node" #'BasicIncloadServer.expand_from_node/respond
-   "expand_from_all_nodes" #'BasicIncloadServer.expand_from_all_nodes/respond })
+  {"expand_from_node"      #'BasicIncloadServer.expand_from_node/respond
+   "expand_from_all_nodes" #'BasicIncloadServer.expand_from_all_nodes/respond
+   "expand_and_replace"    #'BasicIncloadServer.expand_and_replace/respond
+   })
 
 (defn service-meta-info [service-sym]
   (select-keys (meta service-sym) [:input-type :output-type]))
