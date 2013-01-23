@@ -48,8 +48,9 @@
          edges)))
 
 (defn mk-network [nodes edges]
-  {"nodes" nodes
-   "edges" #_(sym-edges-to-indices nodes edges) edges})
+  ;{"nodes" nodes
+  ; "edges" #_(sym-edges-to-indices nodes edges) edges})
+  edges)
 
 (defn root-network []
   (mk-network

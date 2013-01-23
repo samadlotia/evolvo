@@ -67,15 +67,15 @@ public class CyActivator extends AbstractCyActivator
 {
     static final Logger logger = LoggerFactory.getLogger("CyUserMessages");
 
-    static CyNetworkFactory netFct = null;
-    static CyNetworkManager netMgr = null;
-    static CyNetworkViewFactory netViewFct = null;
-    static CyNetworkViewManager netViewMgr = null;
-    static CyGroupFactory grpFct = null;
-    static CyGroupManager grpMgr = null;
-    static CyLayoutAlgorithmManager layoutMgr = null;
-    static CyEventHelper eventHelper = null;
-    static VisualMappingManager vizMapMgr = null;
+    public static CyNetworkFactory netFct = null;
+    public static CyNetworkManager netMgr = null;
+    public static CyNetworkViewFactory netViewFct = null;
+    public static CyNetworkViewManager netViewMgr = null;
+    public static CyGroupFactory grpFct = null;
+    public static CyGroupManager grpMgr = null;
+    public static CyLayoutAlgorithmManager layoutMgr = null;
+    public static CyEventHelper eventHelper = null;
+    public static VisualMappingManager vizMapMgr = null;
 
     public CyActivator()
     {
@@ -102,6 +102,7 @@ public class CyActivator extends AbstractCyActivator
         eventHelper = getService(bc, CyEventHelper.class);
         vizMapMgr = getService(bc, VisualMappingManager.class);
 
+        /*
         registerService(bc, new TaskFactory()
         {
             public TaskIterator createTaskIterator()
@@ -122,7 +123,7 @@ public class CyActivator extends AbstractCyActivator
         {
             public TaskIterator createTaskIterator(View<CyNode> nodeView, CyNetworkView netView)
             {
-                return new TaskIterator(new ExpandTask(nodeView, netView));
+                //return new TaskIterator(new ExpandTask(nodeView, netView));
             }
 
             public boolean isReady(View<CyNode> nodeView, CyNetworkView netView)
@@ -140,7 +141,7 @@ public class CyActivator extends AbstractCyActivator
         {
             public TaskIterator createTaskIterator(View<CyNode> nodeView, CyNetworkView netView)
             {
-                return new TaskIterator(new CollapseTask(nodeView, netView));
+                //return new TaskIterator(new CollapseTask(nodeView, netView));
             }
 
             public boolean isReady(View<CyNode> nodeView, CyNetworkView netView)
@@ -153,8 +154,10 @@ public class CyActivator extends AbstractCyActivator
             TITLE, "Incload: Collapse",
             PREFERRED_MENU, "Apps"
         ));
+        */
     }
 
+    /*
     private static void setStartNetworkURL(final CyNetwork net, final String parentPath)
     {
         final CyTable netTable = net.getTable(CyNetwork.class, CyNetwork.LOCAL_ATTRS);
@@ -169,16 +172,6 @@ public class CyActivator extends AbstractCyActivator
         return netTable.getRow(net.getSUID()).get("StartNetworkURL", String.class);
     }
 
-    private static void applyLayout(final CyNetworkView netView, final TaskMonitor monitor) throws Exception
-    {
-        final CyLayoutAlgorithm alg = layoutMgr.getLayout("hierarchical");
-        final Set<View<CyNode>> nodes = new HashSet<View<CyNode>>(netView.getNodeViews());
-        final TaskIterator tasks = alg.createTaskIterator(netView, alg.getDefaultLayoutContext(), nodes, null);
-        while (tasks.hasNext())
-            tasks.next().run(monitor);
-        vizMapMgr.getCurrentVisualStyle().apply(netView);
-    }
-
     private static JSONObject jsonFromURL(final String url) throws IOException, JSONException
     {
         final InputStream input = (new URL(url)).openConnection().getInputStream();
@@ -187,101 +180,6 @@ public class CyActivator extends AbstractCyActivator
         return obj;
     }
 
-    private static CyNetwork newNetwork(final String name)
-    {
-        final CyNetwork net = netFct.createNetwork();
-        net.getDefaultNetworkTable().getRow(net.getSUID()).set(CyNetwork.NAME, name);
-        netMgr.addNetwork(net);
-        return net;
-    }
-
-    private static String getNetworkName(final CyNetwork net)
-    {
-        return net.getDefaultNetworkTable().getRow(net.getSUID()).get(CyNetwork.NAME, String.class);
-    }
-
-    private static CyNetworkView newNetworkView(final CyNetwork net)
-    {
-        final CyNetworkView netView = netViewFct.createNetworkView(net);
-        netViewMgr.addNetworkView(netView);
-        return netView;
-    }
-
-    private static CyTable getSharedNodeTable(final CyNetwork net)
-    {
-        return ((CySubNetwork) net).getRootNetwork().getTable(CyNode.class, CyRootNetwork.SHARED_ATTRS);
-    }
-
-    private static CyNode newNode(final CyNetwork net, final String name)
-    {
-        final CyNode node = net.addNode();
-        net.getDefaultNodeTable().getRow(node.getSUID()).set("name", name);
-        return node;
-    }
-
-
-    /**
-     * Get all the nodes with a given attribute value.
-     *
-     * This method is effectively a wrapper around {@link CyTable#getMatchingRows}.
-     * It converts the table's primary keys (assuming they are node SUIDs) back to
-     * nodes in the network.
-     *
-     * Here is an example of using this method to find all nodes with a given name:
-     *
-     * {@code
-     *   CyNetwork net = ...;
-     *   String nodeNameToSearchFor = ...;
-     *   Set<CyNode> nodes = getNodesWithValue(net, net.getDefaultNodeTable(), "name", nodeNameToSearchFor);
-     *   // nodes now contains all CyNodes with the name specified by nodeNameToSearchFor
-     * }
-     * @param net The network that contains the nodes you are looking for.
-     * @param table The node table that has the attribute value you are looking for;
-     * the primary keys of this table <i>must</i> be SUIDs of nodes in {@code net}.
-     * @param colname The name of the column with the attribute value
-     * @param value The attribute value
-     * @return A set of {@code CyNode}s with a matching value, or an empty set if no nodes match.
-     */
-    private static Set<CyNode> getNodesWithValue(
-            final CyNetwork net, final CyTable table,
-            final String colname, final Object value)
-    {
-        final Collection<CyRow> matchingRows = table.getMatchingRows(colname, value);
-        final Set<CyNode> nodes = new HashSet<CyNode>();
-        final String primaryKeyColname = table.getPrimaryKey().getName();
-        for (final CyRow row : matchingRows)
-        {
-            final Long nodeId = row.get(primaryKeyColname, Long.class);
-            if (nodeId == null)
-                continue;
-            final CyNode node = net.getNode(nodeId);
-            if (node == null)
-                continue;
-            nodes.add(node);
-        }
-        return nodes;
-    }
-
-
-    private static CyNode getNodeWithValue(
-            final CyNetwork net, final CyTable table,
-            final String colname, final Object value)
-    {
-        final Set<CyNode> nodes = getNodesWithValue(net, table, colname, value);
-        if (nodes.size() == 0)
-            return null;
-        return nodes.iterator().next();
-    }
-
-    private static CyNode getNodeWithName(final CyNetwork net, final String name)
-    {
-        return getNodeWithValue(net, net.getDefaultNodeTable(), "name", name);
-    }
-
-    private static String getNodeName(final CyNetwork net, final CyNode node)
-    {
-        return net.getDefaultNodeTable().getRow(node.getSUID()).get("name", String.class);
-    }
 
     private static String[] jsonStringToArray(final JSONArray jsonStrings)
     {
@@ -331,15 +229,6 @@ public class CyActivator extends AbstractCyActivator
 
     private static void mkEdges(final CyNetwork net, final Map<String,CyNode> nameToNodeMap, final String[][] edges)
     {
-        /*
-        System.out.println("nameToNodeMap:");
-        for (final Map.Entry<String,CyNode> entry : nameToNodeMap.entrySet())
-        {
-            System.out.println(String.format("\"%s\" -> %d", entry.getKey(), entry.getValue().getSUID()));
-        }
-        System.out.println();
-        */
-
         for (final String[] edge : edges)
         {
             //System.out.println(String.format("Edge: %s", Arrays.toString(edge)));
@@ -526,4 +415,6 @@ public class CyActivator extends AbstractCyActivator
 
         public void cancel() { }
     }
+    */
 }
+
