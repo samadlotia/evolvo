@@ -1,6 +1,6 @@
 (ns BasicIncloadServer.expand_and_replace)
 
-(use '[BasicIncloadServer.util :only [json-response bad-request-response]])
+(use '[BasicIncloadServer.util :only [json-response bad-request-response build-network]])
 
 (def root-net
   '[[ a n1]
@@ -57,23 +57,16 @@
 (defn expandable? [node]
   (contains? subnets node))
 
+(defn node-info [node]
+  (conj (node-locations node) (expandable? node)))
+
 (defn any-node-in-edge? [nodes edge]
   (let [[src trg] edge]
     (or (contains? nodes src)
         (contains? nodes trg))))
 
-(defn node-sym-to-details [node-sym]
-  (let [[x y] (node-locations node-sym)]
-    {node-sym {:x x :y y :expandable? (expandable? node-sym)}}))
-
-(defn mk-network [nodes edges]
-  {"nodes" (map node-sym-to-details nodes)
-   "edges" edges})
-
 (defn mk-root-network []
-  (let [edges root-net]
-    (mk-network (distinct (flatten edges))
-                edges)))
+    (build-network root-net node-info ["x" "y" "expandable?"]))
 
 (defn mk-subnetwork [node expanded-nodes]
   (let [edges (subnets node)]
@@ -83,8 +76,8 @@
             ex-edges (:external edges)
             relevant-ex-edges (filter #(any-node-in-edge? expanded-nodes %) ex-edges)
             all-edges (concat in-edges relevant-ex-edges)]
-        (json-response (mk-network (distinct (flatten all-edges))
-                                   all-edges))))))
+        (json-response
+            (build-network all-edges node-info ["x" "y" "expandable?"]))))))
 
 (def service-info
   {:input "all-expanded-nodes"

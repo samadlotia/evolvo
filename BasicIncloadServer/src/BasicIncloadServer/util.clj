@@ -15,3 +15,14 @@
   (->
     (response body)
     (status 400)))
+
+(defn build-network [edges & [node-attrs node-attrs-header]]
+  (let [nodes-array (distinct (flatten edges))
+        node-indices (zipmap nodes-array (range))]
+    {:nodes
+     (if (or (nil? node-attrs) (nil? node-attrs-header))
+       (cons '[name]
+             (map vector nodes-array))
+       (cons (cons 'name node-attrs-header)
+             (map #(cons % (node-attrs %)) nodes-array)))
+     :edges (cons '[src trg] (map (fn [[src trg]] [(node-indices src) (node-indices trg)]) edges))}))

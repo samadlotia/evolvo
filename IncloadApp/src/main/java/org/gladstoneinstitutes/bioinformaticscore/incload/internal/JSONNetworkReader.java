@@ -5,13 +5,12 @@ import java.util.ArrayList;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.Arrays;
-
-import java.io.BufferedReader;
-import java.io.IOException;
+import java.util.Map;
+import java.util.HashMap;
 
 import org.json.JSONObject;
-import org.json.JSONArray;
 import org.json.JSONTokener;
+import org.json.JSONArray;
 import org.json.JSONException;
 
 import org.cytoscape.model.CyTable;
@@ -21,10 +20,58 @@ import org.cytoscape.model.CyEdge;
 import org.cytoscape.model.CyRow;
 import org.cytoscape.model.CyColumn;
 
-class JsonReader {
-    public static void read(final BufferedReader input, final CyNetwork net) throws IOException, JSONException, JsonReaderException {
-        final JSONObject jInput = new JSONObject(new JSONTokener(input));
+import java.io.IOException;
+import java.io.BufferedReader;
 
+// TODO:
+// - Check to see if existing specification is versatile enough to handle things like groups or metanodes
+// - Look for performance bottlenecks; guesses:
+//   - setValue could be slow because it checks the type for each value but it could be checking by column
+//   - accessing JSON values could be slow since it does internal type checking; could be better to
+//     extract values all at once
+class JSONNetworkReader {
+    public static class InvalidContentsException extends Exception {
+        public InvalidContentsException(String msgfmt, Object... args) {
+            super(String.format(msgfmt, args));
+        }
+    }
+
+    /**
+     * Reads in a network specified by a JSON object.
+     * This is a convenience method that parses the JSON given by {@code input}.
+     * @param input A {@code BufferedReader} whose contents are a valid JSON object that specifies a network.
+     * @param net The {@code CyNetwork} into which nodes and edges are created.
+     * @throws InvalidContentsException if {@code input} does not follow the specification of a network
+     * @throws JSONException if {@code input} is not correctly formatted JSON.
+     * @throws IOException if {@code input} could not be read.
+     */
+    public static void read(final BufferedReader input, final CyNetwork net) throws IOException, JSONException, InvalidContentsException {
+        final JSONObject jInput = new JSONObject(new JSONTokener(input));
+        read(jInput, net);
+    }
+
+    /**
+     * Reads in a network specified by a JSON object.
+     * This is a convenience method by using the given network's default node, edge, and network tables
+     * for the attribute tables.
+     * @param jInput The JSON object representing a network.
+     * @param net The {@code CyNetwork} into which nodes and edges are created.
+     * @throws InvalidContentsException if {@code jInput} does not follow the specification of a network
+     */
+    public static void read(final JSONObject jInput, final CyNetwork net) throws InvalidContentsException {
+        read(jInput, net, net.getDefaultNodeTable(), net.getDefaultEdgeTable(), net.getDefaultNetworkTable());
+    }
+
+    /**
+     * Reads in a network specified by a JSON object.
+     * @param jInput The JSON object representing a network.
+     * @param net The {@code CyNetwork} into which nodes and edges are created.
+     * @param nodeTable The table in which to put node attributes; this table's primary key type <i>must</i> be {@code Long} in order to accomodate node SUIDs.
+     * @param edgeTable The table in which to put edge attributes; this table's primary key type <i>must</i> be {@code Long} in order to accomodate edge SUIDs.
+     * @param networkTable The table in which to put network attributes.
+     * @throws InvalidContentsException if {@code jInput} does not follow the specification of a network
+     */
+    public static void read(final JSONObject jInput, final CyNetwork net, final CyTable nodeTable, final CyTable edgeTable, final CyTable networkTable) throws InvalidContentsException {
         final boolean hasNodes = checkTable(jInput, "nodes");
         final boolean hasEdges = checkTable(jInput, "edges");
 
@@ -33,24 +80,24 @@ class JsonReader {
         final boolean duplicateEdges = jInput.optBoolean("duplicate-edges", false);
 
         if (hasNodes) {
-            final List<CyNode> nodes = buildNodes(jInput.getJSONArray("nodes"), net, expandOnNodeAttribute);
+            final List<CyNode> nodes = buildNodes(jInput.optJSONArray("nodes"), net, nodeTable, expandOnNodeAttribute);
             if (hasEdges)
-                buildEdges(jInput.getJSONArray("edges"), net, nodes, directedEdges, duplicateEdges);
+                buildEdges(jInput.optJSONArray("edges"), net, nodes, edgeTable, directedEdges, duplicateEdges);
         }
 
         final boolean hasNetwork = checkTable(jInput, "network");
         if (hasNetwork)
-            addNetworkAttrs(net.getDefaultNetworkTable(), jInput.getJSONArray("network"));
+            addNetworkAttrs(networkTable, jInput.optJSONArray("network"));
     }
 
     /**
      * Checks to make sure a json object's value is a valid table.
      * @param jInput The encapsulating JSON object
      * @param tableElemName Name of the key in {@code jInput} whose value is a JSON array representing a table.
-     * @throws JsonReaderException If the table contained in {@code tableElemName} is a malformed table
+     * @throws InvalidContentsException If the array referenced by {@code tableElemName} is a malformed table
      * @return {@code false} if the table is valid but empty, {@code true} if the table is populated.
      */
-    private static boolean checkTable(final JSONObject jInput, final String tableElemName) throws JsonReaderException {
+    private static boolean checkTable(final JSONObject jInput, final String tableElemName) throws InvalidContentsException {
         if (!jInput.has(tableElemName))
             return false;
 
@@ -64,7 +111,7 @@ class JsonReader {
         // Make sure no array elements in jElems is null
         for (int i = 0; i < jElems.length(); i++) {
             if (jElems.isNull(i)) {
-                throw new JsonReaderException("Element at index %d in '%s' array is null", i, tableElemName);
+                throw new InvalidContentsException("Element at index %d in '%s' array is null", i, tableElemName);
             }
         }
 
@@ -72,7 +119,7 @@ class JsonReader {
         for (int i = 0; i < jElems.length(); i++) {
             final JSONArray elem = jElems.optJSONArray(i);
             if (elem == null) {
-                throw new JsonReaderException("Element at index %d in '%s' array is not an array", i, tableElemName);
+                throw new InvalidContentsException("Element at index %d in '%s' array is not an array", i, tableElemName);
             }
         }
 
@@ -86,18 +133,18 @@ class JsonReader {
         for (int i = 0; i < header.length(); i++) {
             final Object elem = header.opt(i);
             if (elem == null)
-                throw new JsonReaderException("Index %d of header of \'%s\' is null", i, tableElemName);
+                throw new InvalidContentsException("Index %d of header of \'%s\' is null", i, tableElemName);
             else if (!String.class.equals(elem.getClass()))
-                throw new JsonReaderException("Index %d of header of \'%s\' is not a string", i, tableElemName);
+                throw new InvalidContentsException("Index %d of header of \'%s\' is not a string", i, tableElemName);
             else if (elem.toString().length() == 0)
-                throw new JsonReaderException("Index %d of header of \'%s\' is an empty string", i, tableElemName);
+                throw new InvalidContentsException("Index %d of header of \'%s\' is an empty string", i, tableElemName);
         }
 
         // make sure each table entry has the same number of entries as the header
         for (int i = 1; i < jElems.length(); i++) {
             final JSONArray jElem = jElems.optJSONArray(i);
             if (jElem.length() != header.length()) {
-                throw new JsonReaderException("'%s' element at index %d has %d attributes, but the header has %d attribute names", tableElemName, i, jElem.length(), header.length());
+                throw new InvalidContentsException("'%s' element at index %d has %d attributes, but the header has %d attribute names", tableElemName, i, jElem.length(), header.length());
             }
         }
 
@@ -127,9 +174,9 @@ class JsonReader {
                     continue;
                 final Class type = value.getClass();
                 if (!type.equals(expectedType))
-                    throw new JsonReaderException("Attribute at index %d of node at index %d has type %s but must be %s", j, i, type, expectedType);
+                    throw new InvalidContentsException("Attribute at index %d of node at index %d has type %s but must be %s", j, i, type, expectedType);
                 if (!PRIMITIVE_TYPES.contains(type))
-                    throw new JsonReaderException("Attribute at index %d of node at index %d has type %s but can only be one of these: %s", j, i, type, PRIMITIVE_TYPES);
+                    throw new InvalidContentsException("Attribute at index %d of node at index %d has type %s but can only be one of these: %s", j, i, type, PRIMITIVE_TYPES);
             }
         }
 
@@ -169,24 +216,24 @@ class JsonReader {
      * in null for {@code expandOnNodeAttribute}, there will be two nodes with the name "A".
      * </p>
      */
-    private static List<CyNode> buildNodes(final JSONArray jNodes, final CyNetwork net, final String expandOnNodeAttribute) throws JSONException, JsonReaderException {
-        final CyTable table = net.getDefaultNodeTable();
+    private static List<CyNode> buildNodes(final JSONArray jNodes, final CyNetwork net, final CyTable table, final String expandOnNodeAttribute) throws InvalidContentsException {
         final List<CyNode> nodes = new ArrayList<CyNode>();
-        final JSONArray header = jNodes.getJSONArray(0);
+        final JSONArray header = jNodes.optJSONArray(0);
 
         int expandIndex = -1; // the column number for expanding the nodes
         if (expandOnNodeAttribute != null && expandOnNodeAttribute.length() != 0) {
             expandIndex = findInJSONArray(header, expandOnNodeAttribute);
             if (expandIndex < 0)
-                throw new JsonReaderException("No such column \"%s\" in nodes header", expandOnNodeAttribute);
+                throw new InvalidContentsException("No such column \"%s\" in nodes header", expandOnNodeAttribute);
         }
 
         for (int i = 1; i < jNodes.length(); i++) {
-            final JSONArray jNode = jNodes.getJSONArray(i);
-            final CyNode node = getNodeOrNew(net, expandOnNodeAttribute, jNode.opt(expandIndex));
+            final JSONArray jNode = jNodes.optJSONArray(i);
+            final CyNode node = getNodeOrNew(net, table, expandOnNodeAttribute, jNode.opt(expandIndex));
             final Long nodeSUID = node.getSUID();
             for (int col = 0; col < header.length(); col++) {
-                setValue(table, nodeSUID, header.getString(col), jNode.opt(col));
+                final String colname = header.optString(col);
+                setValue(table, nodeSUID, colname, jNode.opt(col));
             }
             nodes.add(node);
         }
@@ -197,9 +244,9 @@ class JsonReader {
      * Look up the index of a String in a json array.
      * @return the index of the string, or -1 if the String could not be found
      */
-    private static int findInJSONArray(final JSONArray array, final String value) throws JSONException {
+    private static int findInJSONArray(final JSONArray array, final String value) {
         for (int col = 0; col < array.length(); col++)
-            if (value.equals(array.getString(col)))
+            if (value.equals(array.optString(col)))
                 return col;
         return -1;
     }
@@ -212,11 +259,13 @@ class JsonReader {
      * @param value The attribute's value in the column specified by {@code colName}; if this
      * is null, this method will return a new node
      */
-    private static CyNode getNodeOrNew(final CyNetwork net, final String colName, final Object value) {
+    private static CyNode getNodeOrNew(final CyNetwork net, final CyTable nodeTable, final String colName, final Object value) {
         if (colName == null || value == null)
             return net.addNode();
-        final CyNode node = Utils.getNodeWithValue(net, net.getDefaultNodeTable(), colName, value);
-        return node != null ? node : net.addNode();
+        CyNode node = Utils.getNodeWithValue(net, nodeTable, colName, value);
+        if (node == null)
+            node = net.addNode();
+        return node;
     }
 
     /**
@@ -224,7 +273,7 @@ class JsonReader {
      * @param colName the name of the column in the table that'll contain the value; if the column
      * does not exist in the table, it will be created based on {@code value}'s type.
      */
-    private static void setValue(final CyTable table, final Object key, final String colName, final Object value) throws JsonReaderException {
+    private static void setValue(final CyTable table, final Object key, final String colName, final Object value) throws InvalidContentsException {
         if (value == null)
             return;
 
@@ -237,7 +286,7 @@ class JsonReader {
             // make sure the existing column's type matches value's type
             final Class expectedType = table.getColumn(colName).getType();
             if (!expectedType.equals(type))
-                throw new JsonReaderException("Cannot insert value \"%s\" of type %s into column \"%s\" with type %s", value, type, colName, expectedType);
+                throw new InvalidContentsException("Cannot insert value \"%s\" of type %s into column \"%s\" with type %s", value, type, colName, expectedType);
         }
 
         final CyRow row = table.getRow(key);
@@ -248,19 +297,18 @@ class JsonReader {
         else if (type.equals(Long.class))    row.set(colName, (Long)    value);
     }
 
-    private static void buildEdges(final JSONArray jEdges, final CyNetwork net, final List<CyNode> nodes, final boolean directedEdges, final boolean duplicateEdges) throws JSONException, JsonReaderException {
-        final JSONArray header = jEdges.getJSONArray(0);
-        final CyTable table = net.getDefaultEdgeTable();
+    private static void buildEdges(final JSONArray jEdges, final CyNetwork net, final List<CyNode> nodes, final CyTable table, final boolean directedEdges, final boolean duplicateEdges) throws InvalidContentsException {
+        final JSONArray header = jEdges.optJSONArray(0);
         
         for (int row = 1; row < jEdges.length(); row++) {
-            final JSONArray jEdge = jEdges.getJSONArray(row);
+            final JSONArray jEdge = jEdges.optJSONArray(row);
 
             final Integer srcIndex = jEdge.optInt(0);
             final Integer trgIndex = jEdge.optInt(1);
             if (srcIndex == null || (!(0 <= srcIndex && srcIndex < nodes.size())))
-                throw new JsonReaderException("Edge at index %d doesn't have valid source index", row);
+                throw new InvalidContentsException("Edge at index %d doesn't have valid source index", row);
             if (trgIndex == null || (!(0 <= trgIndex && trgIndex < nodes.size())))
-                throw new JsonReaderException("Edge at index %d doesn't have valid target index", row);
+                throw new InvalidContentsException("Edge at index %d doesn't have valid target index", row);
 
             final CyNode src = nodes.get(srcIndex);
             final CyNode trg = nodes.get(trgIndex);
@@ -270,35 +318,36 @@ class JsonReader {
             final Long edgeSUID = edge.getSUID();
 
             for (int col = 2; col < jEdge.length(); col++) {
-                setValue(table, edgeSUID, header.getString(col), jEdge.opt(col));
+                final String colname = header.optString(col);
+                setValue(table, edgeSUID, colname, jEdge.opt(col));
             }
         }
     }
 
-    private static void addNetworkAttrs(final CyTable table, final JSONArray jAttrs) throws JsonReaderException, JSONException {
-        final JSONArray header = jAttrs.getJSONArray(0);
+    private static void addNetworkAttrs(final CyTable table, final JSONArray jAttrs) throws InvalidContentsException {
+        final JSONArray header = jAttrs.optJSONArray(0);
         final int primaryKeyIndex = findInJSONArray(header, "primary-key");
         if (primaryKeyIndex < 0)
-            throw new JsonReaderException("Header does not have \"primary-key\" column in \'network\' table");
+            throw new InvalidContentsException("Header does not have \"primary-key\" column in \'network\' table");
         final Class expectedPrimaryKeyType = table.getPrimaryKey().getType();
         for (int row = 1; row < jAttrs.length(); row++) {
-            final JSONArray jRow = jAttrs.getJSONArray(row);
+            final JSONArray jRow = jAttrs.optJSONArray(row);
             Object primaryKey = jRow.opt(primaryKeyIndex);
+
+            // check that the primary key object matches the primary key column;
+            // promote integer objects to longs if necessary
             final Class primaryKeyType = primaryKey.getClass();
             if (primaryKeyType.equals(Integer.class) && expectedPrimaryKeyType.equals(Long.class))
                 primaryKey = new Long((Integer) primaryKey);
             else if (!primaryKeyType.equals(expectedPrimaryKeyType))
-                throw new JsonReaderException("Primary key of row %d in \'network\' table has type %s but should be %s", row, primaryKeyType, expectedPrimaryKeyType);
+                throw new InvalidContentsException("Primary key of row %d in \'network\' table has type %s but should be %s", row, primaryKeyType, expectedPrimaryKeyType);
+
             for (int col = 0; col < jAttrs.length(); col++) {
                 if (col == primaryKeyIndex) continue;
-                setValue(table, primaryKey, header.getString(col), jRow.opt(col));
+                final String colname = header.optString(col);
+                setValue(table, primaryKey, colname, jRow.opt(col));
             }
         }
     }
 }
 
-class JsonReaderException extends Exception {
-    public JsonReaderException(String msgfmt, Object... args) {
-        super(String.format(msgfmt, args));
-    }
-}

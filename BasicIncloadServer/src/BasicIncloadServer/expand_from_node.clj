@@ -1,6 +1,6 @@
 (ns BasicIncloadServer.expand_from_node)
 
-(use '[BasicIncloadServer.util :only [json-response bad-request-response]])
+(use '[BasicIncloadServer.util :only (json-response bad-request-response build-network)])
 
 (def network
   '[[d b]
@@ -47,21 +47,12 @@
                           (get indices trg)])
          edges)))
 
-(defn mk-network [nodes edges]
-  ;{"nodes" nodes
-  ; "edges" #_(sym-edges-to-indices nodes edges) edges})
-  edges)
-
 (defn root-network []
-  (mk-network
-    root-nodes
+  (build-network
     (edges-between root-nodes)))
 
 (defn child-network [node]
-  (let [adj-edges-to-node (adj-edges node)]
-    (mk-network
-      (conj (adj-nodes node adj-edges-to-node) node)
-      adj-edges-to-node)))
+  (build-network (adj-edges node)))
 
 (def service-info
   {:input "node-to-expand"

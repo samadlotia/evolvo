@@ -4,14 +4,14 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.io.InputStream;
 import java.io.IOException;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+
+import org.json.JSONObject;
+import org.json.JSONTokener;
 
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
-
-import org.json.JSONTokener;
-import org.json.JSONObject;
-import org.json.JSONArray;
-import org.json.JSONException;
 
 import java.util.Collection;
 import java.util.Iterator;
@@ -49,6 +49,7 @@ import org.cytoscape.view.model.View;
 import org.cytoscape.view.model.CyNetworkView;
 import org.cytoscape.view.model.CyNetworkViewFactory;
 import org.cytoscape.view.model.CyNetworkViewManager;
+import org.cytoscape.view.presentation.property.BasicVisualLexicon;
 import org.cytoscape.view.vizmap.VisualMappingManager;
 
 import org.cytoscape.view.layout.CyLayoutAlgorithm;
@@ -102,7 +103,6 @@ public class CyActivator extends AbstractCyActivator
         eventHelper = getService(bc, CyEventHelper.class);
         vizMapMgr = getService(bc, VisualMappingManager.class);
 
-        /*
         registerService(bc, new TaskFactory()
         {
             public TaskIterator createTaskIterator()
@@ -123,13 +123,13 @@ public class CyActivator extends AbstractCyActivator
         {
             public TaskIterator createTaskIterator(View<CyNode> nodeView, CyNetworkView netView)
             {
-                //return new TaskIterator(new ExpandTask(nodeView, netView));
+                return new TaskIterator(/*new ExpandTask(nodeView, netView)*/);
             }
 
             public boolean isReady(View<CyNode> nodeView, CyNetworkView netView)
             {
                 return (getStartNetworkURL(netView.getModel()) != null)
-                    && (!isExpanded(netView.getModel(), nodeView.getModel()));
+                    /*&& (!isExpanded(netView.getModel(), nodeView.getModel()))*/;
             }
 
         }, NodeViewTaskFactory.class, ezProps(
@@ -141,23 +141,21 @@ public class CyActivator extends AbstractCyActivator
         {
             public TaskIterator createTaskIterator(View<CyNode> nodeView, CyNetworkView netView)
             {
-                //return new TaskIterator(new CollapseTask(nodeView, netView));
+                return new TaskIterator(/*new CollapseTask(nodeView, netView)*/);
             }
 
             public boolean isReady(View<CyNode> nodeView, CyNetworkView netView)
             {
                 return (getStartNetworkURL(netView.getModel()) != null)
-                    && (isExpanded(netView.getModel(), nodeView.getModel()));
+                    /*&& (isExpanded(netView.getModel(), nodeView.getModel()))*/;
             }
 
         }, NodeViewTaskFactory.class, ezProps(
             TITLE, "Incload: Collapse",
             PREFERRED_MENU, "Apps"
         ));
-        */
     }
 
-    /*
     private static void setStartNetworkURL(final CyNetwork net, final String parentPath)
     {
         final CyTable netTable = net.getTable(CyNetwork.class, CyNetwork.LOCAL_ATTRS);
@@ -172,78 +170,34 @@ public class CyActivator extends AbstractCyActivator
         return netTable.getRow(net.getSUID()).get("StartNetworkURL", String.class);
     }
 
-    private static JSONObject jsonFromURL(final String url) throws IOException, JSONException
+    private static class LoadStartNetworkTask implements Task
     {
-        final InputStream input = (new URL(url)).openConnection().getInputStream();
-        final JSONObject obj = new JSONObject(new JSONTokener(input));
-        input.close();
-        return obj;
-    }
+        @Tunable(description="URL")
+        public String url = "http://localhost:8000/expand_and_replace";
 
-
-    private static String[] jsonStringToArray(final JSONArray jsonStrings)
-    {
-        final int len = jsonStrings.length();
-        final String[] array = new String[len];
-        for (int i = 0; i < len; i++)
-            array[i] = jsonStrings.optString(i);
-        //System.out.println(String.format("json conv: %s -> %s", jsonStrings, Arrays.toString(array)));
-        return array;
-    }
-
-    private static String[][] jsonArrayOfStringsToArrays(final JSONArray jsonArrayOfStrings)
-    {
-        final int len = jsonArrayOfStrings.length();
-        final String[][] arrays = new String[len][];
-        for (int i = 0; i < len; i++)
+        public void run(final TaskMonitor monitor) throws Exception
         {
-            final JSONArray array = jsonArrayOfStrings.optJSONArray(i);
-            if (array != null)
-                arrays[i] = jsonStringToArray(array);
+            monitor.setTitle("Incload: Opening network");
+            monitor.setStatusMessage("Downloading from " + url);
+
+            final InputStream input = (new URL(url)).openConnection().getInputStream();
+            final JSONObject jInput = new JSONObject(new JSONTokener(new BufferedReader(new InputStreamReader(input))));
+
+            final CyNetwork net = Utils.newNetwork(String.format("%s (Incremental Network)", url));
+            JSONNetworkReader.read(jInput, net);
+            setStartNetworkURL(net, url);
+            final CyNetworkView netView = Utils.newNetworkView(net);
+            layout(netView);
         }
-        return arrays;
+
+        public void cancel() {}
     }
 
-    private static Map<String,CyNode> mkNameToNodeMap(
-            final CyNetwork net,
-            final String[] names,
-            final Set<CyNode> newNodes)
-    {
-        final Map<String,CyNode> nameToNodeMap = new HashMap<String,CyNode>();
-        final CyTable table = net.getDefaultNodeTable();
-        for (final String name : names)
-        {
-            //System.out.print("Node: " + name + " ");
-            CyNode node = getNodeWithName(net, name);
-            if (node == null)
-            {
-                node = newNode(net, name);
-                newNodes.add(node);
-            }
-            //System.out.println(node.getSUID());
-            nameToNodeMap.put(name, node);
-        }
-        //eventHelper.flushPayloadEvents();
-        return nameToNodeMap;
-    }
 
-    private static void mkEdges(final CyNetwork net, final Map<String,CyNode> nameToNodeMap, final String[][] edges)
-    {
-        for (final String[] edge : edges)
-        {
-            //System.out.println(String.format("Edge: %s", Arrays.toString(edge)));
-            final String src = edge[0];
-            final String trg = edge[1];
-            //System.out.println(String.format("Edge: %s -> %s", src, trg));
-            final CyNode srcNode = nameToNodeMap.get(src);
-            //System.out.println(String.format("Src: %s - %d", src, srcNode.getSUID()));
-            final CyNode trgNode = nameToNodeMap.get(trg);
-            //System.out.println(String.format("Trg: %s - %d", trg, trgNode.getSUID()));
-            if (!net.containsEdge(srcNode, trgNode))
-                net.addEdge(srcNode, trgNode, false);
-        }
-        //eventHelper.flushPayloadEvents();
-    }
+
+    
+
+    /*
 
     private static final String PARENT_COL_NAME = "IncloadParentNodeSUID";
 
@@ -342,29 +296,6 @@ public class CyActivator extends AbstractCyActivator
         net.removeNodes(children);
     }
 
-    public static class LoadStartNetworkTask implements Task
-    {
-        @Tunable(description="URL")
-        public String url = "http://localhost:8000/";
-
-        public void run(final TaskMonitor monitor) throws Exception
-        {
-            monitor.setTitle("Incload: Opening network");
-            monitor.setStatusMessage("Downloading from " + url);
-
-            final JSONObject contents = jsonFromURL(url);
-            final CyNetwork net = newNetwork(String.format("%s (Incremental Network)", url));
-            //System.out.println("INCLOAD: new net: " + net.getSUID());
-            expand(net, contents, null);
-
-            setStartNetworkURL(net, url);
-            final CyNetworkView netView = newNetworkView(net);
-            applyLayout(netView, monitor);
-        }
-
-        public void cancel() {}
-    }
-
     public static class ExpandTask implements Task
     {
         final View<CyNode> nodeView;
@@ -416,5 +347,16 @@ public class CyActivator extends AbstractCyActivator
         public void cancel() { }
     }
     */
-}
 
+    private static void layout(final CyNetworkView netView) {
+        final CyNetwork net = netView.getModel();
+        for (final CyNode node : net.getNodeList()) {
+            final View<CyNode> nodeView = netView.getNodeView(node);
+            final CyRow row = net.getRow(node);
+            final Number x = row.get("x", Number.class);
+            final Number y = row.get("y", Number.class);
+            if (x != null) nodeView.setVisualProperty(BasicVisualLexicon.NODE_X_LOCATION, x.doubleValue());
+            if (y != null) nodeView.setVisualProperty(BasicVisualLexicon.NODE_Y_LOCATION, y.doubleValue());
+        }
+    }
+}
