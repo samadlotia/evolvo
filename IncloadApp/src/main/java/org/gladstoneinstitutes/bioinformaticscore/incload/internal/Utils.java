@@ -64,6 +64,8 @@ import static org.cytoscape.work.ServiceProperties.*;
 
 import org.cytoscape.task.NodeViewTaskFactory;
 
+import static org.gladstoneinstitutes.bioinformaticscore.incload.internal.Attr.*;
+
 class Utils {
     public static void applyLayout(final CyNetworkView netView, final String layoutName, final TaskIterator iterator) {
         final CyLayoutAlgorithm alg = CyActivator.layoutMgr.getLayout(layoutName);
@@ -80,7 +82,8 @@ class Utils {
 
     public static CyNetwork newNetwork(final String name) {
         final CyNetwork net = CyActivator.netFct.createNetwork();
-        net.getDefaultNetworkTable().getRow(net.getSUID()).set(CyNetwork.NAME, name);
+        Attr(net, CyNetwork.NAME).set(name);
+        //net.getDefaultNetworkTable().getRow(net.getSUID()).set(CyNetwork.NAME, name);
         CyActivator.netMgr.addNetwork(net);
         return net;
     }
@@ -93,7 +96,8 @@ class Utils {
 
     public static CyNode newNode(final CyNetwork net, final String name) {
         final CyNode node = net.addNode();
-        net.getDefaultNodeTable().getRow(node.getSUID()).set("name", name);
+        Attr(net, node, "name").set(name);
+        //net.getDefaultNodeTable().getRow(node.getSUID()).set("name", name);
         return node;
     }
 
@@ -149,9 +153,5 @@ class Utils {
 
     public static CyNode getNodeWithName(final CyNetwork net, final String name) {
         return getNodeWithValue(net, net.getDefaultNodeTable(), "name", name);
-    }
-
-    public static String getNodeName(final CyNetwork net, final CyNode node) {
-        return net.getDefaultNodeTable().getRow(node.getSUID()).get("name", String.class);
     }
 }

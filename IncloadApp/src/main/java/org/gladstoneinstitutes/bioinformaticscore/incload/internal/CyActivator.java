@@ -223,8 +223,11 @@ public class CyActivator extends AbstractCyActivator {
             writer.flush();
             writer.close();
 
-            JSONObject input = new JSONObject(new JSONTokener(new InputStreamReader(urlconn.getInputStream())));
-            logger.info(input.toString());
+            final JSONObject jInput = new JSONObject(new JSONTokener(new InputStreamReader(urlconn.getInputStream())));
+
+            final CyGroup group = grpFct.createGroup(net, node, true);
+            JSONNetworkReader.read(jInput, group.getGroupNetwork());
+            group.expand(net);
         }
 
         public void cancel() {}

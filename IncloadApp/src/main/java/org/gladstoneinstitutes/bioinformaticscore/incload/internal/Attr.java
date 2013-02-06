@@ -80,7 +80,6 @@ class Attr {
     }
 
     public void set(String value) {
-        System.out.println(String.format("Net: %s, obj: %s, ns: %s, col: %s", net, netObj, ns, column));
         ensureColumn(String.class);
         row().set(column, value);
     }
