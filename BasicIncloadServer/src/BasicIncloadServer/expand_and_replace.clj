@@ -81,11 +81,12 @@
 
 (def service-info
   {:input "all-expanded-nodes"
-   :action "expand-and-replace"})
+   :action "expand-and-replace"
+   :node-column "name"})
 
 (defn respond [params]
   (if (contains? params "node")
     (let [node (symbol (params "node"))
-          expanded-nodes (set (map symbol (clojure.string/split (params "expanded-nodes") #",")))]
+          expanded-nodes (set (map symbol (params "expanded-nodes")))]
       (mk-subnetwork node expanded-nodes))
     (json-response (mk-root-network) service-info)))

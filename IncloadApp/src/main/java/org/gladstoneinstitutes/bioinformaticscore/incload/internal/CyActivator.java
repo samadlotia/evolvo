@@ -2,13 +2,22 @@ package org.gladstoneinstitutes.bioinformaticscore.incload.internal;
 
 import java.net.URL;
 import java.net.URLConnection;
+import java.net.HttpURLConnection;
 import java.io.InputStream;
 import java.io.IOException;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.BufferedWriter;
+import java.io.Writer;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONTokener;
+import org.json.JSONWriter;
+import org.json.JSONStringer;
+import org.json.JSONException;
 
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
@@ -64,8 +73,9 @@ import static org.cytoscape.work.ServiceProperties.*;
 
 import org.cytoscape.task.NodeViewTaskFactory;
 
-public class CyActivator extends AbstractCyActivator
-{
+import static org.gladstoneinstitutes.bioinformaticscore.incload.internal.Attr.*;
+
+public class CyActivator extends AbstractCyActivator {
     static final Logger logger = LoggerFactory.getLogger("CyUserMessages");
 
     public static CyNetworkFactory netFct = null;
@@ -78,21 +88,18 @@ public class CyActivator extends AbstractCyActivator
     public static CyEventHelper eventHelper = null;
     public static VisualMappingManager vizMapMgr = null;
 
-    public CyActivator()
-    {
+    public CyActivator() {
         super();
     }
 
-    private static Properties ezProps(String... vals)
-    {
+    private static Properties ezProps(String... vals) {
         final Properties props = new Properties();
         for (int i = 0; i < vals.length; i += 2)
             props.put(vals[i], vals[i + 1]);
         return props;
     }
 
-    public void start(BundleContext bc)
-    {
+    public void start(BundleContext bc) {
         netFct = getService(bc, CyNetworkFactory.class);
         netMgr = getService(bc, CyNetworkManager.class);
         netViewFct = getService(bc, CyNetworkViewFactory.class);
@@ -103,15 +110,12 @@ public class CyActivator extends AbstractCyActivator
         eventHelper = getService(bc, CyEventHelper.class);
         vizMapMgr = getService(bc, VisualMappingManager.class);
 
-        registerService(bc, new TaskFactory()
-        {
-            public TaskIterator createTaskIterator()
-            {
-                return new TaskIterator(new LoadStartNetworkTask());
+        registerService(bc, new TaskFactory() {
+            public TaskIterator createTaskIterator() {
+                return new TaskIterator(new LoadNetworkTask());
             }
 
-            public boolean isReady()
-            {
+            public boolean isReady() {
                 return true;
             }
         }, TaskFactory.class, ezProps(
@@ -119,73 +123,43 @@ public class CyActivator extends AbstractCyActivator
             PREFERRED_MENU, "Apps"
         ));
 
-        registerService(bc, new NodeViewTaskFactory()
-        {
-            public TaskIterator createTaskIterator(View<CyNode> nodeView, CyNetworkView netView)
-            {
-                return new TaskIterator(/*new ExpandTask(nodeView, netView)*/);
+        registerService(bc, new NodeViewTaskFactory() {
+            public TaskIterator createTaskIterator(View<CyNode> nodeView, CyNetworkView netView) {
+                return new TaskIterator(new ExpandTask(nodeView, netView));
             }
 
-            public boolean isReady(View<CyNode> nodeView, CyNetworkView netView)
-            {
-                return (getStartNetworkURL(netView.getModel()) != null)
-                    /*&& (!isExpanded(netView.getModel(), nodeView.getModel()))*/;
+            public boolean isReady(View<CyNode> nodeView, CyNetworkView netView) {
+                return isExpandable(netView.getModel(), nodeView.getModel());
             }
 
         }, NodeViewTaskFactory.class, ezProps(
             TITLE, "Incload: Expand",
             PREFERRED_MENU, "Apps"
         ));
-
-        registerService(bc, new NodeViewTaskFactory()
-        {
-            public TaskIterator createTaskIterator(View<CyNode> nodeView, CyNetworkView netView)
-            {
-                return new TaskIterator(/*new CollapseTask(nodeView, netView)*/);
-            }
-
-            public boolean isReady(View<CyNode> nodeView, CyNetworkView netView)
-            {
-                return (getStartNetworkURL(netView.getModel()) != null)
-                    /*&& (isExpanded(netView.getModel(), nodeView.getModel()))*/;
-            }
-
-        }, NodeViewTaskFactory.class, ezProps(
-            TITLE, "Incload: Collapse",
-            PREFERRED_MENU, "Apps"
-        ));
     }
 
-    private static void setStartNetworkURL(final CyNetwork net, final String parentPath)
-    {
-        final CyTable netTable = net.getTable(CyNetwork.class, CyNetwork.LOCAL_ATTRS);
-        if (netTable.getColumn("StartNetworkURL") == null)
-            netTable.createColumn("StartNetworkURL", String.class, true);
-        netTable.getRow(net.getSUID()).set("StartNetworkURL", parentPath);
-    }
-
-    private static String getStartNetworkURL(final CyNetwork net)
-    {
-        final CyTable netTable = net.getTable(CyNetwork.class, CyNetwork.LOCAL_ATTRS);
-        return netTable.getRow(net.getSUID()).get("StartNetworkURL", String.class);
-    }
-
-    private static class LoadStartNetworkTask implements Task
-    {
+    public static class LoadNetworkTask implements Task {
         @Tunable(description="URL")
         public String url = "http://localhost:8000/expand_and_replace";
 
-        public void run(final TaskMonitor monitor) throws Exception
-        {
+        public void run(final TaskMonitor monitor) throws Exception {
             monitor.setTitle("Incload: Opening network");
             monitor.setStatusMessage("Downloading from " + url);
 
-            final InputStream input = (new URL(url)).openConnection().getInputStream();
+            final CyNetwork net = Utils.newNetwork(String.format("%s (Incremental Network)", url));
+            final URLConnection urlconn = (new URL(url)).openConnection();
+
+            Attr(net, "IncloadURL").set(url);
+            JSONObject serviceParams = new JSONObject(new JSONTokener(urlconn.getHeaderField("Incload-Info")));
+            Attr(net, "IncloadInput").set(serviceParams.optString("input"));
+            Attr(net, "IncloadAction").set(serviceParams.optString("action"));
+            Attr(net, "IncloadNodeColumn").set(serviceParams.optString("node-column"));
+            
+
+            final InputStream input = urlconn.getInputStream();
             final JSONObject jInput = new JSONObject(new JSONTokener(new BufferedReader(new InputStreamReader(input))));
 
-            final CyNetwork net = Utils.newNetwork(String.format("%s (Incremental Network)", url));
             JSONNetworkReader.read(jInput, net);
-            setStartNetworkURL(net, url);
             final CyNetworkView netView = Utils.newNetworkView(net);
             layout(netView);
         }
@@ -193,160 +167,9 @@ public class CyActivator extends AbstractCyActivator
         public void cancel() {}
     }
 
-
-
-    
-
-    /*
-
-    private static final String PARENT_COL_NAME = "IncloadParentNodeSUID";
-
-    private static void setParentNode(final CyNetwork net, final Iterable<CyNode> nodes, final CyNode parentNode)
-    {
-        final CyTable table = net.getTable(CyNode.class, CyNetwork.LOCAL_ATTRS);
-        final CyColumn parentCol = table.getColumn(PARENT_COL_NAME);
-        if (parentCol == null)
-            table.createColumn(PARENT_COL_NAME, Long.class, false);
-
-        final Long parentSUID = parentNode.getSUID();
-        for (final CyNode node : nodes)
-        {
-            final long nodeSUID = node.getSUID();
-            if (table.getRow(nodeSUID).get(PARENT_COL_NAME, Long.class) == null)
-                table.getRow(nodeSUID).set(PARENT_COL_NAME, parentSUID);
-        }
+    private static boolean isExpandable(final CyNetwork net, final CyNode node) {
+        return Attr(net, node, "expandable?").local().def(false).Bool();
     }
-
-    private static CyNode getParentNode(final CyNetwork net, final CyNode node)
-    {
-        final CyTable table = net.getTable(CyNode.class, CyNetwork.LOCAL_ATTRS);
-        final Long parentSUID = table.getRow(node.getSUID()).get(PARENT_COL_NAME, Long.class);
-        if (parentSUID == null)
-            return null;
-        return net.getNode(parentSUID);
-    }
-
-    private static Set<CyNode> getNodesWithParent(final CyNetwork net, final CyNode parent)
-    {
-        final CyTable table = net.getTable(CyNode.class, CyNetwork.LOCAL_ATTRS);
-        return getNodesWithValue(net, table, PARENT_COL_NAME, parent.getSUID());
-    }
-
-    private static final String EXPANDED_COL_NAME = "IncloadExpandedState";
-
-    private static void setExpandedState(final CyNetwork net, final CyNode node, final boolean state)
-    {
-        final CyTable table = net.getTable(CyNode.class, CyNetwork.LOCAL_ATTRS);
-        CyColumn expandedCol = table.getColumn(EXPANDED_COL_NAME);
-        if (expandedCol == null)
-            table.createColumn(EXPANDED_COL_NAME, Boolean.class, false);
-
-        table.getRow(node.getSUID()).set(EXPANDED_COL_NAME, state);
-    }
-
-    private static boolean isExpanded(final CyNetwork net, final CyNode node)
-    {
-        final CyTable table = net.getTable(CyNode.class, CyNetwork.LOCAL_ATTRS);
-        final Boolean state = table.getRow(node.getSUID()).get(EXPANDED_COL_NAME, Boolean.class);
-        return state != null ? state : false;
-    }
-
-    private static void expand(
-            final CyNetwork net,
-            final JSONObject contents,
-            final CyNode parentNode) throws JSONException
-    {
-        final JSONArray jsonNodes = contents.getJSONArray("nodes");
-        final String[] nodeNames = jsonStringToArray(jsonNodes);
-        final Set<CyNode> newNodes = new HashSet<CyNode>();
-        final Map<String,CyNode> nameToNodeMap = mkNameToNodeMap(net, nodeNames, newNodes);
-
-        for (final CyNode node : newNodes)
-            setExpandedState(net, node, false);
-
-        if (parentNode != null)
-        {
-            setParentNode(net, newNodes, parentNode);
-            setExpandedState(net, parentNode, true);
-            nameToNodeMap.put(getNodeName(net, parentNode), parentNode);
-        }
-
-        final JSONArray jsonEdges = contents.getJSONArray("edges");
-        final String[][] edges = jsonArrayOfStringsToArrays(jsonEdges);
-        mkEdges(net, nameToNodeMap, edges);
-
-        eventHelper.flushPayloadEvents();
-    }
-
-    private static void collapseNode(final CyNetwork net, final CyNode node)
-    {
-        setExpandedState(net, node, false);
-
-        final Set<CyNode> children = getNodesWithParent(net, node);
-        //System.out.println("Found children:");
-        //for (final CyNode child : children)
-            //System.out.println(getNodeName(net, child));
-        //System.out.println();
-        
-        // Collapse any of our children if they were expanded
-        for (final CyNode child : children)
-            if (isExpanded(net, child))
-                collapseNode(net, child);
-
-        net.removeNodes(children);
-    }
-
-    public static class ExpandTask implements Task
-    {
-        final View<CyNode> nodeView;
-        final CyNetworkView netView;
-
-        public ExpandTask(View<CyNode> nodeView, CyNetworkView netView)
-        {
-            this.nodeView = nodeView;
-            this.netView = netView;
-        }
-
-        public void run(TaskMonitor monitor) throws Exception
-        {
-            final CyNetwork net = netView.getModel();
-            final CyNode node = nodeView.getModel();
-            //System.out.println("INCLOAD: expansion: " + net.getSUID());
-
-            final String startURL = getStartNetworkURL(net);
-            final String url = startURL + getNodeName(net, node);
-
-            final JSONObject contents = jsonFromURL(url);
-            expand(net, contents, node);
-
-            applyLayout(netView, monitor);
-        }
-
-        public void cancel() { }
-    }
-
-    public static class CollapseTask implements Task
-    {
-        final View<CyNode> nodeView;
-        final CyNetworkView netView;
-
-        public CollapseTask(View<CyNode> nodeView, CyNetworkView netView)
-        {
-            this.nodeView = nodeView;
-            this.netView = netView;
-        }
-
-        public void run(TaskMonitor monitor) throws Exception
-        {
-            final CyNetwork net = netView.getModel();
-            final CyNode node = nodeView.getModel();
-            collapseNode(net, node);
-            applyLayout(netView, monitor);
-        }
-
-        public void cancel() { }
-    }
-    */
 
     private static void layout(final CyNetworkView netView) {
         final CyNetwork net = netView.getModel();
@@ -358,5 +181,52 @@ public class CyActivator extends AbstractCyActivator
             if (x != null) nodeView.setVisualProperty(BasicVisualLexicon.NODE_X_LOCATION, x.doubleValue());
             if (y != null) nodeView.setVisualProperty(BasicVisualLexicon.NODE_Y_LOCATION, y.doubleValue());
         }
+    }
+
+    private static void writeRequest(final Writer writer, final CyNode nodeToExpand, final CyNetwork net) throws JSONException {
+        final String column = Attr(net, "IncloadNodeColumn").Str();
+        final JSONWriter output = new JSONWriter(writer);
+        output.object();
+        output.key("node").value(net.getRow(nodeToExpand).getRaw(column).toString());
+        output.key("expanded-nodes").array();
+        for (final CyNode node : net.getNodeList()) {
+            if (node.equals(nodeToExpand))
+                continue;
+            output.value(net.getRow(node).getRaw(column).toString());
+        }
+        output.endArray().endObject();
+    }
+
+    private static class ExpandTask implements Task {
+        final View<CyNode> nodeView;
+        final CyNetworkView netView;
+
+        public ExpandTask(View<CyNode> nodeView, CyNetworkView netView) {
+            this.nodeView = nodeView;
+            this.netView = netView;
+        }
+
+        public void run(final TaskMonitor monitor) throws Exception {
+            final CyNetwork net = netView.getModel();
+            final CyNode node = nodeView.getModel();
+
+            final String url = Attr(net, "IncloadURL").Str();
+            final HttpURLConnection urlconn = (HttpURLConnection) (new URL(url)).openConnection();
+            urlconn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            urlconn.setDoOutput(true);
+            urlconn.setDoInput(true);
+            urlconn.connect();
+
+            final OutputStream output = urlconn.getOutputStream();
+            final BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(output));
+            writeRequest(writer, node, net);
+            writer.flush();
+            writer.close();
+
+            JSONObject input = new JSONObject(new JSONTokener(new InputStreamReader(urlconn.getInputStream())));
+            logger.info(input.toString());
+        }
+
+        public void cancel() {}
     }
 }

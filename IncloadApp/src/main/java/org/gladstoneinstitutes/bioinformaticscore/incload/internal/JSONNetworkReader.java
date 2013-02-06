@@ -24,11 +24,13 @@ import java.io.IOException;
 import java.io.BufferedReader;
 
 // TODO:
-// - Check to see if existing specification is versatile enough to handle things like groups or metanodes
+// - Check to see if existing specification is versatile enough to handle things like groups or metanodes.
+// - Switch to a JSON library that has streaming/incremental reading support. We don't need to read
+//   the entire JSON input all at once but can read it in pieces.
 // - Look for performance bottlenecks; guesses:
 //   - setValue could be slow because it checks the type for each value but it could be checking by column
-//   - accessing JSON values could be slow since it does internal type checking; could be better to
-//     extract values all at once
+//   - accessing JSON values individually could be slow since it does internal type checking; could be better to
+//     extract values all at once to an array
 class JSONNetworkReader {
     public static class InvalidContentsException extends Exception {
         public InvalidContentsException(String msgfmt, Object... args) {

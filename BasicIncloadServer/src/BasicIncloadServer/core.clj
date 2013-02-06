@@ -2,7 +2,7 @@
 
 (use '[ring.adapter.jetty :only [run-jetty]])
 (use '[ring.middleware.params :only [wrap-params]])
-(use '[ring.util.response :only [not-found]])
+(use '[ring.util.response :only [not-found response]])
 (use '[cheshire.core :only [parse-stream]])
 (use '[clojure.java.io :only [reader]])
 
@@ -19,6 +19,10 @@
 (defn service-meta-info [service-sym]
   (select-keys (meta service-sym) [:input-type :output-type]))
 
+(defn handler-x [request]
+  (println request)
+  (response "{}"))
+
 (defn handler [request]
   (let [path (rest (clojure.string/split (:uri request) #"\/+"))]
     (if (nil? path)
@@ -27,6 +31,7 @@
             service-params (if (= (:request-method request) :post)
                              (parse-stream (reader (:body request)))
                              (:query-params request))]
+        (println service-params)
         (if (contains? services service-name)
           (let [service (get services service-name)]
             (service service-params))

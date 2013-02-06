@@ -3,13 +3,16 @@
 (use '[cheshire.core :only [generate-string]])
 (use '[ring.util.response :only [response content-type header status]])
 
-(defn json-response [service-response & service-info]
-  ((if (nil? service-info)
-     identity
-     #(header % "Incload-Info" (generate-string service-info)))
-     (->
-       (response (generate-string service-response))
-       (content-type "application/json"))))
+(defn add-header [service-info]
+  (if (nil? service-info)
+    identity
+    #(header % "Incload-Info" (generate-string service-info))))
+
+(defn json-response [service-response & [service-info]]
+  (->
+    (response (generate-string service-response))
+    (content-type "application/json")
+    ((add-header service-info))))
 
 (defn bad-request-response [body]
   (->
