@@ -136,6 +136,48 @@ public class CyActivator extends AbstractCyActivator {
             TITLE, "Incload: Expand",
             PREFERRED_MENU, "Apps"
         ));
+
+        registerService(bc, new TaskFactory() {
+            public TaskIterator createTaskIterator() {
+                return new TaskIterator(new Task() {
+                    public void run(TaskMonitor monitor) {
+                        testGroups();
+                    }
+
+                    public void cancel() {}
+                });
+            }
+
+            public boolean isReady() {
+                return true;
+            }
+        }, TaskFactory.class, ezProps(
+            TITLE, "Test groups",
+            PREFERRED_MENU, "Apps"
+        ));
+    }
+
+    private static void testGroups() {
+        final CyNetwork net = Utils.newNetwork("group test");
+        final CyRootNetwork rootNet = ((CySubNetwork) net).getRootNetwork();
+        final CyNetworkView netView = Utils.newNetworkView(net);
+
+        final CyNode nodeA = net.addNode();
+        Attr(net, nodeA, "name").set("A");
+        final CyNode nodeB = net.addNode();
+        Attr(net, nodeB, "name").set("B");
+        net.addEdge(nodeA, nodeB, false);
+
+        final CyNode nodeC = rootNet.addNode();
+        //Attr(net, nodeC, "name").shared().set("C");
+        final CyNode nodeD = rootNet.addNode();
+        //Attr(net, nodeD, "name").shared().set("D");
+        final CyEdge edgeCD = rootNet.addEdge(nodeC, nodeD, false);
+
+        eventHelper.flushPayloadEvents();
+
+        final CyGroup groupB = grpFct.createGroup(net, nodeB, Arrays.asList(nodeC, nodeD), Arrays.asList(edgeCD), true);
+        //groupB.expand(net);
     }
 
     public static class LoadNetworkTask implements Task {
@@ -160,6 +202,7 @@ public class CyActivator extends AbstractCyActivator {
             final JSONObject jInput = new JSONObject(new JSONTokener(new BufferedReader(new InputStreamReader(input))));
 
             JSONNetworkReader.read(jInput, net);
+            eventHelper.flushPayloadEvents();
             final CyNetworkView netView = Utils.newNetworkView(net);
             layout(netView);
         }
@@ -217,19 +260,32 @@ public class CyActivator extends AbstractCyActivator {
             urlconn.setDoInput(true);
             urlconn.connect();
 
-            final OutputStream output = urlconn.getOutputStream();
-            final BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(output));
+            final BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(urlconn.getOutputStream()));
             writeRequest(writer, node, net);
-            writer.flush();
             writer.close();
 
             final JSONObject jInput = new JSONObject(new JSONTokener(new InputStreamReader(urlconn.getInputStream())));
 
-            final CyGroup group = grpFct.createGroup(net, node, true);
-            JSONNetworkReader.read(jInput, group.getGroupNetwork());
+            final CyRootNetwork rootNet = ((CySubNetwork) net).getRootNetwork();
+            final JSONNetworkReader.Result result = JSONNetworkReader.read(jInput, rootNet, net.getDefaultNodeTable(), net.getDefaultEdgeTable(), net.getDefaultNetworkTable());
+            eventHelper.flushPayloadEvents();
+            printNodes("nodes:", net, result.nodes);
+            printNodes("new nodes:", net, result.newNodes);
+
+            final CyGroup group = grpFct.createGroup(net, node, result.newNodes, result.newEdges, true);
             group.expand(net);
         }
 
         public void cancel() {}
+    }
+
+    private static void printNodes(final String prefix, final CyNetwork net, List<CyNode> nodes) {
+        System.out.print(prefix);
+        System.out.print(' ');
+        for (final CyNode node : nodes) {
+            System.out.print(Attr(net, node, "name").Str());
+            System.out.print(" ");
+        }
+        System.out.println();
     }
 }

@@ -19,6 +19,7 @@ import org.cytoscape.model.CyNode;
 import org.cytoscape.model.CyEdge;
 import org.cytoscape.model.CyRow;
 import org.cytoscape.model.CyColumn;
+import org.cytoscape.model.subnetwork.CyRootNetwork;
 
 import java.io.IOException;
 import java.io.BufferedReader;
@@ -26,16 +27,24 @@ import java.io.BufferedReader;
 // TODO:
 // - Check to see if existing specification is versatile enough to handle things like groups or metanodes.
 // - Switch to a JSON library that has streaming/incremental reading support. We don't need to read
-//   the entire JSON input all at once but can read it in pieces.
+//   the entire JSON input all at once but can read it in pieces. However, this would require that
+//   the "nodes" entry always appears before "edges".
 // - Look for performance bottlenecks; guesses:
 //   - setValue could be slow because it checks the type for each value but it could be checking by column
 //   - accessing JSON values individually could be slow since it does internal type checking; could be better to
-//     extract values all at once to an array
+//     extract a column's values all at once to an array
 class JSONNetworkReader {
     public static class InvalidContentsException extends Exception {
         public InvalidContentsException(String msgfmt, Object... args) {
             super(String.format(msgfmt, args));
         }
+    }
+
+    public static class Result {
+        public List<CyNode> nodes;
+        public List<CyEdge> edges;
+        public List<CyNode> newNodes;
+        public List<CyEdge> newEdges;
     }
 
     /**
@@ -47,9 +56,9 @@ class JSONNetworkReader {
      * @throws JSONException if {@code input} is not correctly formatted JSON.
      * @throws IOException if {@code input} could not be read.
      */
-    public static void read(final BufferedReader input, final CyNetwork net) throws IOException, JSONException, InvalidContentsException {
+    public static Result read(final BufferedReader input, final CyNetwork net) throws IOException, JSONException, InvalidContentsException {
         final JSONObject jInput = new JSONObject(new JSONTokener(input));
-        read(jInput, net);
+        return read(jInput, net);
     }
 
     /**
@@ -60,8 +69,8 @@ class JSONNetworkReader {
      * @param net The {@code CyNetwork} into which nodes and edges are created.
      * @throws InvalidContentsException if {@code jInput} does not follow the specification of a network
      */
-    public static void read(final JSONObject jInput, final CyNetwork net) throws InvalidContentsException {
-        read(jInput, net, net.getDefaultNodeTable(), net.getDefaultEdgeTable(), net.getDefaultNetworkTable());
+    public static Result read(final JSONObject jInput, final CyNetwork net) throws InvalidContentsException {
+        return read(jInput, net, net.getDefaultNodeTable(), net.getDefaultEdgeTable(), net.getDefaultNetworkTable());
     }
 
     /**
@@ -73,23 +82,26 @@ class JSONNetworkReader {
      * @param networkTable The table in which to put network attributes.
      * @throws InvalidContentsException if {@code jInput} does not follow the specification of a network
      */
-    public static void read(final JSONObject jInput, final CyNetwork net, final CyTable nodeTable, final CyTable edgeTable, final CyTable networkTable) throws InvalidContentsException {
+    public static Result read(final JSONObject jInput, final CyNetwork net, final CyTable nodeTable, final CyTable edgeTable, final CyTable networkTable) throws InvalidContentsException {
         final boolean hasNodes = checkTable(jInput, "nodes");
         final boolean hasEdges = checkTable(jInput, "edges");
+        final boolean hasNetwork = checkTable(jInput, "network");
 
         final String expandOnNodeAttribute = jInput.optString("expand-on-node-attribute");
         final boolean directedEdges = jInput.optBoolean("directed-edges", false);
         final boolean duplicateEdges = jInput.optBoolean("duplicate-edges", false);
 
-        if (hasNodes) {
-            final List<CyNode> nodes = buildNodes(jInput.optJSONArray("nodes"), net, nodeTable, expandOnNodeAttribute);
-            if (hasEdges)
-                buildEdges(jInput.optJSONArray("edges"), net, nodes, edgeTable, directedEdges, duplicateEdges);
-        }
+        final Result result = new Result();
 
-        final boolean hasNetwork = checkTable(jInput, "network");
+        if (hasNodes) {
+            buildNodes(jInput.optJSONArray("nodes"), net, nodeTable, expandOnNodeAttribute, result);
+            if (hasEdges)
+                buildEdges(jInput.optJSONArray("edges"), net, edgeTable, directedEdges, duplicateEdges, result);
+        }
         if (hasNetwork)
             addNetworkAttrs(networkTable, jInput.optJSONArray("network"));
+
+        return result;
     }
 
     /**
@@ -218,8 +230,9 @@ class JSONNetworkReader {
      * in null for {@code expandOnNodeAttribute}, there will be two nodes with the name "A".
      * </p>
      */
-    private static List<CyNode> buildNodes(final JSONArray jNodes, final CyNetwork net, final CyTable table, final String expandOnNodeAttribute) throws InvalidContentsException {
-        final List<CyNode> nodes = new ArrayList<CyNode>();
+    private static void buildNodes(final JSONArray jNodes, final CyNetwork net, final CyTable table, final String expandOnNodeAttribute, final Result result) throws InvalidContentsException {
+        result.nodes = new ArrayList<CyNode>();
+        result.newNodes = new ArrayList<CyNode>();
         final JSONArray header = jNodes.optJSONArray(0);
 
         int expandIndex = -1; // the column number for expanding the nodes
@@ -231,15 +244,20 @@ class JSONNetworkReader {
 
         for (int i = 1; i < jNodes.length(); i++) {
             final JSONArray jNode = jNodes.optJSONArray(i);
-            final CyNode node = getNodeOrNew(net, table, expandOnNodeAttribute, jNode.opt(expandIndex));
+
+            CyNode node = Utils.getNodeWithValue(net, table, expandOnNodeAttribute, jNode.opt(expandIndex));
+            if (node == null) {
+                node = net.addNode();
+                result.newNodes.add(node);
+            }
+            result.nodes.add(node);
+
             final Long nodeSUID = node.getSUID();
             for (int col = 0; col < header.length(); col++) {
                 final String colname = header.optString(col);
                 setValue(table, nodeSUID, colname, jNode.opt(col));
             }
-            nodes.add(node);
         }
-        return nodes;
     }
 
     /**
@@ -251,23 +269,6 @@ class JSONNetworkReader {
             if (value.equals(array.optString(col)))
                 return col;
         return -1;
-    }
-
-    /**
-     * Attempt to find the node with a given attribute, or create a new node if no node was found.
-     * @param net The network in which to create a new node
-     * @param colName The name of the column that contains the attribute in the default
-     * node table; if this is null, this method will return a new node
-     * @param value The attribute's value in the column specified by {@code colName}; if this
-     * is null, this method will return a new node
-     */
-    private static CyNode getNodeOrNew(final CyNetwork net, final CyTable nodeTable, final String colName, final Object value) {
-        if (colName == null || value == null)
-            return net.addNode();
-        CyNode node = Utils.getNodeWithValue(net, nodeTable, colName, value);
-        if (node == null)
-            node = net.addNode();
-        return node;
     }
 
     /**
@@ -299,7 +300,10 @@ class JSONNetworkReader {
         else if (type.equals(Long.class))    row.set(colName, (Long)    value);
     }
 
-    private static void buildEdges(final JSONArray jEdges, final CyNetwork net, final List<CyNode> nodes, final CyTable table, final boolean directedEdges, final boolean duplicateEdges) throws InvalidContentsException {
+    private static void buildEdges(final JSONArray jEdges, final CyNetwork net, final CyTable table, final boolean directedEdges, final boolean duplicateEdges, final Result result) throws InvalidContentsException {
+        result.edges = new ArrayList<CyEdge>();
+        result.newEdges = new ArrayList<CyEdge>();
+
         final JSONArray header = jEdges.optJSONArray(0);
         
         for (int row = 1; row < jEdges.length(); row++) {
@@ -307,18 +311,25 @@ class JSONNetworkReader {
 
             final Integer srcIndex = jEdge.optInt(0);
             final Integer trgIndex = jEdge.optInt(1);
-            if (srcIndex == null || (!(0 <= srcIndex && srcIndex < nodes.size())))
+            if (srcIndex == null || (!(0 <= srcIndex && srcIndex < result.nodes.size())))
                 throw new InvalidContentsException("Edge at index %d doesn't have valid source index", row);
-            if (trgIndex == null || (!(0 <= trgIndex && trgIndex < nodes.size())))
+            if (trgIndex == null || (!(0 <= trgIndex && trgIndex < result.nodes.size())))
                 throw new InvalidContentsException("Edge at index %d doesn't have valid target index", row);
 
-            final CyNode src = nodes.get(srcIndex);
-            final CyNode trg = nodes.get(trgIndex);
+            final CyNode src = result.nodes.get(srcIndex);
+            final CyNode trg = result.nodes.get(trgIndex);
 
-            final List<CyEdge> possibleEdges = net.getConnectingEdgeList(src, trg, directedEdges ? CyEdge.Type.OUTGOING : CyEdge.Type.UNDIRECTED);
-            final CyEdge edge = (possibleEdges.size() == 0 || duplicateEdges) ? net.addEdge(src, trg, directedEdges) : possibleEdges.get(0);
+            CyEdge edge;
+            if (duplicateEdges || !net.containsEdge(src, trg)) {
+                edge = net.addEdge(src, trg, directedEdges);
+                result.newEdges.add(edge);
+            } else {
+                final List<CyEdge> possibleEdges = net.getConnectingEdgeList(src, trg, directedEdges ? CyEdge.Type.OUTGOING : CyEdge.Type.UNDIRECTED);
+                edge = possibleEdges.get(0);
+            }
+            result.edges.add(edge);
+
             final Long edgeSUID = edge.getSUID();
-
             for (int col = 2; col < jEdge.length(); col++) {
                 final String colname = header.optString(col);
                 setValue(table, edgeSUID, colname, jEdge.opt(col));

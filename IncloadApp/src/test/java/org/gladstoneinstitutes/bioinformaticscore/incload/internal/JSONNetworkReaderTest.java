@@ -153,10 +153,13 @@ public class JSONNetworkReaderTest
                 "[\"B\"]," +
               "]"       +
             "}";
-        JSONNetworkReader.read(str2rdr(contents), network);
+        final JSONNetworkReader.Result result = JSONNetworkReader.read(str2rdr(contents), network);
 
         assertTrue(Utils.getNodesWithValue(network, nodeTable, "name", "A").size() == 1);
         assertTrue(Utils.getNodesWithValue(network, nodeTable, "name", "B").size() == 1);
+
+        assertTrue(result.nodes.size() == 2);
+        assertTrue(result.newNodes.size() == 2);
 
         final String contents2 =
             "{"                     +
@@ -167,11 +170,14 @@ public class JSONNetworkReaderTest
               "],"       +
               "\"expand-on-node-attribute\": \"name\"" +
             "}";
-        JSONNetworkReader.read(str2rdr(contents2), network);
+        final JSONNetworkReader.Result result2 = JSONNetworkReader.read(str2rdr(contents2), network);
 
         assertTrue(Utils.getNodesWithValue(network, nodeTable, "name", "A").size() == 1);
         assertTrue(Utils.getNodesWithValue(network, nodeTable, "name", "B").size() == 1);
         assertTrue(Utils.getNodesWithValue(network, nodeTable, "name", "C").size() == 1);
+
+        assertTrue(result2.nodes.size() == 2);
+        assertTrue(result2.newNodes.size() == 1);
     }
 
     @Test(expected=JSONNetworkReader.InvalidContentsException.class)

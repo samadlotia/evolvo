@@ -145,6 +145,8 @@ class Utils {
     public static CyNode getNodeWithValue(
             final CyNetwork net, final CyTable table,
             final String colname, final Object value) {
+        if (colname == null || value == null)
+            return null;
         final Set<CyNode> nodes = getNodesWithValue(net, table, colname, value);
         if (nodes.size() == 0)
             return null;
