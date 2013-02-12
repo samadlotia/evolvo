@@ -136,54 +136,6 @@ public class CyActivator extends AbstractCyActivator {
             TITLE, "Incload: Expand",
             PREFERRED_MENU, "Apps"
         ));
-
-        registerService(bc, new TaskFactory() {
-            public TaskIterator createTaskIterator() {
-                return new TaskIterator(new Task() {
-                    public void run(TaskMonitor monitor) {
-                        testGroups();
-                    }
-
-                    public void cancel() {}
-                });
-            }
-
-            public boolean isReady() {
-                return true;
-            }
-        }, TaskFactory.class, ezProps(
-            TITLE, "Test groups",
-            PREFERRED_MENU, "Apps"
-        ));
-    }
-
-    private static void testGroups() {
-        final CyNetwork net = Utils.newNetwork("group test");
-        final CyRootNetwork rootNet = ((CySubNetwork) net).getRootNetwork();
-        final CyNetworkView netView = Utils.newNetworkView(net);
-
-        final CyNode nodeA = net.addNode();
-        Attr(net, nodeA, "name").set("A");
-        final CyNode nodeB = net.addNode();
-        Attr(net, nodeB, "name").set("B");
-        net.addEdge(nodeA, nodeB, false);
-
-        final CyNode nodeC = net.addNode();
-        //Attr(net, nodeC, "name").set("C");
-        final CyNode nodeD = net.addNode();
-        //Attr(net, nodeD, "name").set("D");
-        final CyEdge edgeCD = net.addEdge(nodeC, nodeD, false);
-
-        eventHelper.flushPayloadEvents();
-
-        final CyGroup groupB = grpFct.createGroup(net, nodeB, Arrays.asList(nodeC, nodeD), Arrays.asList(edgeCD), true);
-        groupB.collapse(net);
-
-        eventHelper.flushPayloadEvents();
-
-        //rootNet.getTable(CyNode.class, CyRootNetwork.SHARED_ATTRS).createColumn("shared name", String.class, false);
-        rootNet.getTable(CyNode.class, CyRootNetwork.SHARED_ATTRS).getRow(nodeC.getSUID()).set("shared name", "C");
-        rootNet.getTable(CyNode.class, CyRootNetwork.SHARED_ATTRS).getRow(nodeD.getSUID()).set("shared name", "D");
     }
 
     public static class LoadNetworkTask implements Task {
