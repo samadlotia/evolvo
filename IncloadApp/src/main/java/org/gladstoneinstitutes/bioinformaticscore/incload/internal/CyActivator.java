@@ -168,16 +168,22 @@ public class CyActivator extends AbstractCyActivator {
         Attr(net, nodeB, "name").set("B");
         net.addEdge(nodeA, nodeB, false);
 
-        final CyNode nodeC = rootNet.addNode();
-        //Attr(net, nodeC, "name").shared().set("C");
-        final CyNode nodeD = rootNet.addNode();
-        //Attr(net, nodeD, "name").shared().set("D");
-        final CyEdge edgeCD = rootNet.addEdge(nodeC, nodeD, false);
+        final CyNode nodeC = net.addNode();
+        //Attr(net, nodeC, "name").set("C");
+        final CyNode nodeD = net.addNode();
+        //Attr(net, nodeD, "name").set("D");
+        final CyEdge edgeCD = net.addEdge(nodeC, nodeD, false);
 
         eventHelper.flushPayloadEvents();
 
         final CyGroup groupB = grpFct.createGroup(net, nodeB, Arrays.asList(nodeC, nodeD), Arrays.asList(edgeCD), true);
-        //groupB.expand(net);
+        groupB.collapse(net);
+
+        eventHelper.flushPayloadEvents();
+
+        //rootNet.getTable(CyNode.class, CyRootNetwork.SHARED_ATTRS).createColumn("shared name", String.class, false);
+        rootNet.getTable(CyNode.class, CyRootNetwork.SHARED_ATTRS).getRow(nodeC.getSUID()).set("shared name", "C");
+        rootNet.getTable(CyNode.class, CyRootNetwork.SHARED_ATTRS).getRow(nodeD.getSUID()).set("shared name", "D");
     }
 
     public static class LoadNetworkTask implements Task {
@@ -211,7 +217,7 @@ public class CyActivator extends AbstractCyActivator {
     }
 
     private static boolean isExpandable(final CyNetwork net, final CyNode node) {
-        return Attr(net, node, "expandable?").local().def(false).Bool();
+        return Attr(net, node, "expandable?").local().Bool(false);
     }
 
     private static void layout(final CyNetworkView netView) {

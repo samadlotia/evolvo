@@ -94,42 +94,89 @@ import org.cytoscape.model.CyColumn;
  */
 public class Attr {
     CyNetwork net          = null;
+    CyRootNetwork rootNet  = null;
     CyIdentifiable netObj  = null;
     Class<? extends CyIdentifiable> netObjType = null;
     String ns              = CyNetwork.DEFAULT_ATTRS;
     String column          = null;
-    Object defaultValue    = null;
+
+    public static Attr Attr() {
+        return new Attr();
+    }
 
     /**
      * Obtain a network attribute for a given column.
      */
     public static Attr Attr(final CyNetwork net, final String column) {
-        return new Attr(net, net, column);
+        return Attr().on(net).col(column);
     }
 
     /**
-     * Obtain a network object attribute for a given column.
+     * Obtain a node attribute for a given column.
      */
-    public static Attr Attr(final CyNetwork net, final CyIdentifiable netObj, final String column) {
-        return new Attr(net, netObj, column);
+    public static Attr Attr(final CyNetwork net, final CyNode node, final String column) {
+        return Attr().net(net).on(node).col(column);
+    }
+
+    /**
+     * Obtain a node attribute for a given column.
+     */
+    public static Attr Attr(final CyNetwork net, final CyEdge edge, final String column) {
+        return Attr().net(net).on(edge).col(column);
     }
 
     /**
      * Use one of the static methods above to create an instance.
      */
-    private Attr(final CyNetwork net, final CyIdentifiable netObj, final String column) {
+    private Attr() {}
+
+    // -------------------------------------------
+    
+    /**
+     * Assign a network from which to obtain attributes.
+     */
+    public Attr net(final CyNetwork net) {
         this.net = net;
-        this.netObj = netObj;
-        this.column = column;
-        if (netObj instanceof CyNetwork)
-            netObjType = CyNetwork.class;
-        else if (netObj instanceof CyNode)
-            netObjType = CyNode.class;
-        else if (netObj instanceof CyEdge)
-            netObjType = CyEdge.class;
-        else
-            throw new IllegalArgumentException("Unrecognized network object type -- must be a CyNetwork, CyNode, or CyEdge");
+        return this;
     }
+
+    /**
+     * Obtain attributes for a given network.
+     */
+    public Attr on(final CyNetwork net) {
+        this.net = net;
+        this.netObj = net;
+        this.netObjType = CyNetwork.class;
+        return this;
+    }
+
+    /**
+     * Obtain attributes for a given node. A network must be supplied by calling {@code net} before getting or setting attributes.
+     */
+    public Attr on(final CyNode node) {
+        this.netObj = node;
+        this.netObjType = CyNode.class;
+        return this;
+    }
+
+    /**
+     * Obtain attributes for a given edge. A network must be supplied by calling {@code net} before getting or setting attributes.
+     */
+    public Attr on(final CyEdge edge) {
+        this.netObj = edge;
+        this.netObjType = CyEdge.class;
+        return this;
+    }
+
+    /**
+     * Obtain attributes from the given column.
+     */
+    public Attr col(final String column) {
+        this.column = column;
+        return this;
+    }
+
+    // -------------------------------------------
 
     /**
      * Use the hidden table.
@@ -213,44 +260,87 @@ public class Attr {
     // -------------------------------------------
 
     /**
-     * Assign a default value.
+     * Obtain the attribute as a string.
+     * If there is no attribute for the given column,
+     * this will return the default value.
      */
-    public Attr def(final Object defaultValue) {
-        this.defaultValue = defaultValue;
-        return this;
-    }
-
-    private Object value() {
-        final Object value = row().getRaw(column);
-        return value == null ? defaultValue : value;
+    public String Str(final String defaultValue) {
+        final String val = row().get(column, String.class);
+        return val != null ? null : defaultValue;
     }
 
     /**
      * Obtain the attribute as a string.
      */
     public String Str() {
-        return (String) value();
+        return Str(null);
     }
 
     /**
-     * Obtain the attribute as an integer.
+     * Obtain the attribute as a boolean.
+     * If there is no attribute for the given column,
+     * this will return the default value.
      */
-    public Integer Int() {
-        return (Integer) value();
-    }
-
-    /**
-     * Obtain the attribute as a long.
-     */
-    public Long Long() {
-        return (Long) value();
+    public Boolean Bool(final Boolean defaultValue) {
+        final Boolean val = row().get(column, Boolean.class);
+        return val != null ? null : defaultValue;
     }
 
     /**
      * Obtain the attribute as a boolean.
      */
     public Boolean Bool() {
-        return (Boolean) value();
+        return Bool(null);
+    }
+
+    /**
+     * Obtain the attribute as an integer.
+     * If there is no attribute for the given column,
+     * this will return the default value.
+     */
+    public Integer Int(final Integer defaultValue) {
+        final Integer val = row().get(column, Integer.class);
+        return val != null ? null : defaultValue;
+    }
+
+    /**
+     * Obtain the attribute as a boolean.
+     */
+    public Integer Int() {
+        return Int(null);
+    }
+
+    /**
+     * Obtain the attribute as a long.
+     * If there is no attribute for the given column,
+     * this will return the default value.
+     */
+    public Long Long(final Long defaultValue) {
+        final Long val = row().get(column, Long.class);
+        return val != null ? null : defaultValue;
+    }
+
+    /**
+     * Obtain the attribute as a boolean.
+     */
+    public Long Long() {
+        return Long(null);
+    }
+
+    /**
+     * Obtain the attribute as a double.
+     * If there is no attribute for the given column,
+     * this will return the default value.
+     */
+    public Double Double(final Double defaultValue) {
+        final Double val = row().get(column, Double.class);
+        return val != null ? null : defaultValue;
+    }
+
+    /**
+     * Obtain the attribute as a boolean.
+     */
+    public Double Double() {
+        return Double(null);
     }
 }
-
