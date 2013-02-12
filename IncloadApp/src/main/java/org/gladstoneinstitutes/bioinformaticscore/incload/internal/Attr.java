@@ -40,7 +40,7 @@ import org.cytoscape.model.CyColumn;
  * Get the "weight" attribute of an as an integer.
  * If the edge does not have this attribute, return the default value of 30.
  * <blockquote>
- *   {@code Attr(network, edge, "nodeSize").def(30).Int()}
+ *   {@code Attr(network, edge, "nodeSize").Int(30)}
  * </blockquote>
  * </p>
  *
@@ -78,7 +78,7 @@ import org.cytoscape.model.CyColumn;
  * Get the "weight" attribute of an edge as an integer with
  * the default value of 15 from the local table.
  * <blockquote>
- *   {@code Attr(network, edge, "weight").local().def(15).Int()}
+ *   {@code Attr(network, edge, "weight").local().Int(15)}
  * </blockquote>
  * </p>
  *
@@ -108,21 +108,21 @@ public class Attr {
      * Obtain a network attribute for a given column.
      */
     public static Attr Attr(final CyNetwork net, final String column) {
-        return Attr().on(net).col(column);
+        return Attr().on(net, column);
     }
 
     /**
      * Obtain a node attribute for a given column.
      */
     public static Attr Attr(final CyNetwork net, final CyNode node, final String column) {
-        return Attr().net(net).on(node).col(column);
+        return Attr().on(net, node, column);
     }
 
     /**
      * Obtain a node attribute for a given column.
      */
     public static Attr Attr(final CyNetwork net, final CyEdge edge, final String column) {
-        return Attr().net(net).on(edge).col(column);
+        return Attr().on(net, edge, column);
     }
 
     /**
@@ -133,7 +133,10 @@ public class Attr {
     // -------------------------------------------
     
     /**
-     * Assign a network from which to obtain attributes.
+     * Assign a different network from which to obtain attributes.
+     * This method should be called only when working with node or edge
+     * attributes. This method should not be used when obtaining network
+     * attributes.
      */
     public Attr net(final CyNetwork net) {
         this.net = net;
@@ -141,7 +144,8 @@ public class Attr {
     }
 
     /**
-     * Obtain attributes for a given network.
+     * Work with network attributes.
+     * This does not assign a column.
      */
     public Attr on(final CyNetwork net) {
         this.net = net;
@@ -151,7 +155,19 @@ public class Attr {
     }
 
     /**
-     * Obtain attributes for a given node. A network must be supplied by calling {@code net} before getting or setting attributes.
+     * Work with network attributes for the given column.
+     */
+    public Attr on(final CyNetwork net, final String column) {
+        this.net = net;
+        this.netObj = net;
+        this.netObjType = CyNetwork.class;
+        this.column = column;
+        return this;
+    }
+
+    /**
+     * Work with node attributes.
+     * This does not assign a network or a column.
      */
     public Attr on(final CyNode node) {
         this.netObj = node;
@@ -160,17 +176,66 @@ public class Attr {
     }
 
     /**
-     * Obtain attributes for a given edge. A network must be supplied by calling {@code net} before getting or setting attributes.
+     * Work with node attributes.
+     * This does not assign a column.
      */
+    public Attr on(final CyNetwork net, final CyNode node) {
+        this.net = net;
+        this.netObj = node;
+        this.netObjType = CyNode.class;
+        return this;
+    }
+
+    /**
+     * Work with node attributes.
+     * This does not assign a network.
+     */
+    public Attr on(final CyNode node, final String column) {
+        this.netObj = node;
+        this.netObjType = CyNode.class;
+        this.column = column;
+        return this;
+    }
+
+    /**
+     * Work with node attributes.
+     */
+    public Attr on(final CyNetwork net, final CyNode node, final String column) {
+        this.net = net;
+        this.netObj = node;
+        this.netObjType = CyNode.class;
+        this.column = column;
+        return this;
+    }
+
     public Attr on(final CyEdge edge) {
         this.netObj = edge;
         this.netObjType = CyEdge.class;
         return this;
     }
 
-    /**
-     * Obtain attributes from the given column.
-     */
+    public Attr on(final CyNetwork net, final CyEdge edge) {
+        this.net = net;
+        this.netObj = edge;
+        this.netObjType = CyEdge.class;
+        return this;
+    }
+
+    public Attr on(final CyEdge edge, final String column) {
+        this.netObj = edge;
+        this.netObjType = CyEdge.class;
+        this.column = column;
+        return this;
+    }
+
+    public Attr on(final CyNetwork net, final CyEdge edge, final String column) {
+        this.net = net;
+        this.netObj = edge;
+        this.netObjType = CyEdge.class;
+        this.column = column;
+        return this;
+    }
+
     public Attr col(final String column) {
         this.column = column;
         return this;
@@ -259,6 +324,11 @@ public class Attr {
 
     // -------------------------------------------
 
+    public String toString() {
+        final Object val = row().getRaw(column);
+        return val == null ? "null" : val.toString();
+    }
+
     /**
      * Obtain the attribute as a string.
      * If there is no attribute for the given column,
@@ -266,7 +336,7 @@ public class Attr {
      */
     public String Str(final String defaultValue) {
         final String val = row().get(column, String.class);
-        return val != null ? null : defaultValue;
+        return val != null ? val : defaultValue;
     }
 
     /**
@@ -283,7 +353,7 @@ public class Attr {
      */
     public Boolean Bool(final Boolean defaultValue) {
         final Boolean val = row().get(column, Boolean.class);
-        return val != null ? null : defaultValue;
+        return val != null ? val : defaultValue;
     }
 
     /**
@@ -300,7 +370,7 @@ public class Attr {
      */
     public Integer Int(final Integer defaultValue) {
         final Integer val = row().get(column, Integer.class);
-        return val != null ? null : defaultValue;
+        return val != null ? val : defaultValue;
     }
 
     /**
@@ -317,7 +387,7 @@ public class Attr {
      */
     public Long Long(final Long defaultValue) {
         final Long val = row().get(column, Long.class);
-        return val != null ? null : defaultValue;
+        return val != null ? val : defaultValue;
     }
 
     /**
@@ -334,7 +404,7 @@ public class Attr {
      */
     public Double Double(final Double defaultValue) {
         final Double val = row().get(column, Double.class);
-        return val != null ? null : defaultValue;
+        return val != null ? val : defaultValue;
     }
 
     /**

@@ -11,6 +11,7 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.BufferedWriter;
 import java.io.Writer;
+import java.io.Reader;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -169,7 +170,8 @@ public class CyActivator extends AbstractCyActivator {
     }
 
     private static boolean isExpandable(final CyNetwork net, final CyNode node) {
-        return Attr(net, node, "expandable?").local().Bool(false);
+        //System.out.println(String.format("Node: %s, expandable?: %s", Attr(net, node, "name"), Attr(net, node, "expandable?")));
+        return Attr(net, node, "expandable?").Bool(false);
     }
 
     private static void layout(final CyNetworkView netView) {
@@ -222,7 +224,9 @@ public class CyActivator extends AbstractCyActivator {
             writeRequest(writer, node, net);
             writer.close();
 
-            final JSONObject jInput = new JSONObject(new JSONTokener(new InputStreamReader(urlconn.getInputStream())));
+            final Reader reader = new InputStreamReader(urlconn.getInputStream());
+            final JSONObject jInput = new JSONObject(new JSONTokener(reader));
+            reader.close();
 
             //final CyRootNetwork rootNet = ((CySubNetwork) net).getRootNetwork();
             final JSONNetworkReader.Result result = JSONNetworkReader.read(jInput, net);

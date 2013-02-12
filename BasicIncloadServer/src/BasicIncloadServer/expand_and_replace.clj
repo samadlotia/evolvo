@@ -76,6 +76,8 @@
             ex-edges (:external edges)
             relevant-ex-edges (filter #(any-node-in-edge? expanded-nodes %) ex-edges)
             all-edges (concat in-edges relevant-ex-edges)]
+        (println in-edges)
+        (println relevant-ex-edges)
         (json-response
             (build-network all-edges node-info ["x" "y" "expandable?"]))))))
 
@@ -88,5 +90,5 @@
   (if (contains? params "node")
     (let [node (symbol (params "node"))
           expanded-nodes (set (map symbol (params "expanded-nodes")))]
-      (mk-subnetwork node expanded-nodes))
+      (mk-subnetwork node (set expanded-nodes)))
     (json-response (mk-root-network) service-info)))
