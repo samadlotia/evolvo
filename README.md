@@ -11,13 +11,7 @@ Set Up BasicIncloadServer
 
  1. In the `BasicInloadServer` directory, start the REPL, a command-line prompt for interacting with Clojure programs:
 
-        lein repl
-
- 1. Copy these commands and paste them into the REPL:
-
-        (use 'BasicIncloadServer.core)
-        (use 'ring.adapter.jetty)
-        (run-jetty handler {:port 8000})
+        lein run
 
 The server should now be running. You can ensure that it's running with `curl`:
 

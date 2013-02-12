@@ -224,14 +224,15 @@ public class CyActivator extends AbstractCyActivator {
 
             final JSONObject jInput = new JSONObject(new JSONTokener(new InputStreamReader(urlconn.getInputStream())));
 
-            final CyRootNetwork rootNet = ((CySubNetwork) net).getRootNetwork();
-            final JSONNetworkReader.Result result = JSONNetworkReader.read(jInput, rootNet, net.getDefaultNodeTable(), net.getDefaultEdgeTable(), net.getDefaultNetworkTable());
+            //final CyRootNetwork rootNet = ((CySubNetwork) net).getRootNetwork();
+            final JSONNetworkReader.Result result = JSONNetworkReader.read(jInput, net);
             eventHelper.flushPayloadEvents();
+
             printNodes("nodes:", net, result.nodes);
             printNodes("new nodes:", net, result.newNodes);
 
             final CyGroup group = grpFct.createGroup(net, node, result.newNodes, result.newEdges, true);
-            group.expand(net);
+            group.collapse(net);
         }
 
         public void cancel() {}
