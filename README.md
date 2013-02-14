@@ -9,7 +9,7 @@ Set Up BasicIncloadServer
 
         brew install leiningen 
 
- 1. In the `BasicInloadServer` directory, start the REPL, a command-line prompt for interacting with Clojure programs:
+ 1. In the `BasicInloadServer` directory, start the server:
 
         lein run
 
