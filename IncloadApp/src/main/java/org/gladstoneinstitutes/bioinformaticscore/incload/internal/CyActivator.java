@@ -229,6 +229,7 @@ public class CyActivator extends AbstractCyActivator {
             reader.close();
 
             //final CyRootNetwork rootNet = ((CySubNetwork) net).getRootNetwork();
+            final String expandOnNodeAttr = Attr(net, "IncloadNodeColumn").Str();
             final JSONNetworkReader.Result result = JSONNetworkReader.read(jInput, net);
             eventHelper.flushPayloadEvents();
 

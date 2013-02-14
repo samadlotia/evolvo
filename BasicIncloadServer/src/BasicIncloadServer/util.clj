@@ -28,4 +28,5 @@
              (map vector nodes-array))
        (cons (cons 'name node-attrs-header)
              (map #(cons % (node-attrs %)) nodes-array)))
-     :edges (cons '[src trg] (map (fn [[src trg]] [(node-indices src) (node-indices trg)]) edges))}))
+     :edges (cons '[src trg] (map (fn [[src trg]] [(node-indices src) (node-indices trg)]) edges))
+     :expand-on-node-attribute "name"}))
