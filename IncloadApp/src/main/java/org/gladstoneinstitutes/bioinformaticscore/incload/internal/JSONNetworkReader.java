@@ -301,6 +301,7 @@ class JSONNetworkReader {
     }
 
     private static void buildEdges(final JSONArray jEdges, final CyNetwork net, final CyTable table, final boolean directedEdges, final boolean duplicateEdges, final Result result) throws InvalidContentsException {
+	final CyEdge.Type edgeType = directedEdges ? CyEdge.Type.OUTGOING : CyEdge.Type.UNDIRECTED;
         result.edges = new ArrayList<CyEdge>();
         result.newEdges = new ArrayList<CyEdge>();
 
@@ -322,9 +323,10 @@ class JSONNetworkReader {
             CyEdge edge;
             if (duplicateEdges || !net.containsEdge(src, trg)) {
                 edge = net.addEdge(src, trg, directedEdges);
+                System.out.println(String.format("New edge: %s <-> %s", Attr.Attr(net, src, "name"), Attr.Attr(net, trg, "name")));
                 result.newEdges.add(edge);
             } else {
-                final List<CyEdge> possibleEdges = net.getConnectingEdgeList(src, trg, directedEdges ? CyEdge.Type.OUTGOING : CyEdge.Type.UNDIRECTED);
+                final List<CyEdge> possibleEdges = net.getConnectingEdgeList(src, trg, edgeType);
                 edge = possibleEdges.get(0);
             }
             result.edges.add(edge);

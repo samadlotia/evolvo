@@ -269,6 +269,28 @@ public class JSONNetworkReaderTest
         JSONNetworkReader.read(str2rdr(contents), network);
     }
 
+    @Test
+    public void testDuplicateEdges() throws Exception {
+        final String contents =
+            "{"                     +
+              "\"nodes\": [" +
+                "[\"name\"]," +
+                "[\"A\"]," +
+                "[\"B\"]," +
+                "[\"C\"]," +
+              "],"       +
+              "\"edges\": [" +
+                "[\"src\", \"trg\"]," +
+                "[0      , 1      ]," + 
+                "[0      , 2      ]," +
+                "[1      , 2      ]," +
+              "],"       +
+            "}";
+        JSONNetworkReader.read(str2rdr(contents), network);
+
+	
+    }
+
     private static BufferedReader str2rdr(final String input) {
         return new BufferedReader(new StringReader(input));
     }

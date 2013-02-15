@@ -155,7 +155,6 @@ public class CyActivator extends AbstractCyActivator {
             Attr(net, "IncloadInput").set(serviceParams.optString("input"));
             Attr(net, "IncloadAction").set(serviceParams.optString("action"));
             Attr(net, "IncloadNodeColumn").set(serviceParams.optString("node-column"));
-            
 
             final InputStream input = urlconn.getInputStream();
             final JSONObject jInput = new JSONObject(new JSONTokener(new BufferedReader(new InputStreamReader(input))));
@@ -184,6 +183,7 @@ public class CyActivator extends AbstractCyActivator {
             if (x != null) nodeView.setVisualProperty(BasicVisualLexicon.NODE_X_LOCATION, x.doubleValue());
             if (y != null) nodeView.setVisualProperty(BasicVisualLexicon.NODE_Y_LOCATION, y.doubleValue());
         }
+	vizMapMgr.getCurrentVisualStyle().apply(netView);
     }
 
     private static void writeRequest(final Writer writer, final CyNode nodeToExpand, final CyNetwork net) throws JSONException {
@@ -233,11 +233,14 @@ public class CyActivator extends AbstractCyActivator {
             final JSONNetworkReader.Result result = JSONNetworkReader.read(jInput, net);
             eventHelper.flushPayloadEvents();
 
-            printNodes("nodes:", net, result.nodes);
-            printNodes("new nodes:", net, result.newNodes);
+            //printNodes("nodes:", net, result.nodes);
+            //printNodes("new nodes:", net, result.newNodes);
 
             final CyGroup group = grpFct.createGroup(net, node, result.newNodes, result.newEdges, true);
             group.collapse(net);
+            eventHelper.flushPayloadEvents();
+
+            dumpGroup(net, group);
         }
 
         public void cancel() {}
@@ -251,5 +254,27 @@ public class CyActivator extends AbstractCyActivator {
             System.out.print(" ");
         }
         System.out.println();
+    }
+
+    private static void dumpGroup(final CyNetwork net, final CyGroup grp) {
+        System.out.println("All Nodes:");
+        for (final CyNode node : net.getNodeList()) {
+            System.out.println(String.format("  %d - %s", node.getSUID(), Attr(net, node, "name")));
+        }
+
+        System.out.println("Nodes:");
+        for (final CyNode node : grp.getNodeList()) {
+            System.out.println(String.format("  %d - %s", node.getSUID(), Attr(net, node, "name")));
+        }
+
+        System.out.println("Int edges:");
+        for (final CyEdge edge : grp.getInternalEdgeList()) {
+            System.out.println(String.format(" %d - %s <-> %s", edge.getSUID(), Attr(net, edge.getSource(), "name"), Attr(net, edge.getTarget(), "name")));
+        }
+
+        System.out.println("Ext edges:");
+        for (final CyEdge edge : grp.getExternalEdgeList()) {
+            System.out.println(String.format("  %d - %s <-> %s", edge.getSUID(), Attr(net, edge.getSource(), "name"), Attr(net, edge.getTarget(), "name")));
+        }
     }
 }
