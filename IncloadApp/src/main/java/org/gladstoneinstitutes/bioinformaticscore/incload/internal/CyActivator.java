@@ -24,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -137,6 +138,20 @@ public class CyActivator extends AbstractCyActivator {
             TITLE, "Incload: Expand",
             PREFERRED_MENU, "Apps"
         ));
+
+        registerService(bc, new NodeViewTaskFactory() {
+            public TaskIterator createTaskIterator(View<CyNode> nodeView, CyNetworkView netView) {
+                return new TaskIterator(new CollapseAndRemoveTask(nodeView, netView));
+            }
+
+            public boolean isReady(View<CyNode> nodeView, CyNetworkView netView) {
+                return isCollapsable(netView.getModel(), nodeView.getModel());
+            }
+
+        }, NodeViewTaskFactory.class, ezProps(
+            TITLE, "Incload: Collapse & Remove",
+            PREFERRED_MENU, "Apps"
+        ));
     }
 
     public static class LoadNetworkTask implements Task {
@@ -170,7 +185,19 @@ public class CyActivator extends AbstractCyActivator {
 
     private static boolean isExpandable(final CyNetwork net, final CyNode node) {
         //System.out.println(String.format("Node: %s, expandable?: %s", Attr(net, node, "name"), Attr(net, node, "expandable?")));
-        return Attr(net, node, "expandable?").Bool(false);
+        final boolean expandable = Attr(net, node, "IncloadExpandable").Bool(false);
+        final boolean expanded = Attr(net, node, "IncloadExpanded").Bool(false);
+        return (expandable && !expanded);
+    }
+
+    private static boolean isCollapsable(final CyNetwork net, final CyNode node) {
+        //System.out.println(String.format("Node: %s, expandable?: %s", Attr(net, node, "name"), Attr(net, node, "expandable?")));
+        /*
+        final boolean expandable = Attr(net, node, "IncloadExpandable").Bool(false);
+        final boolean expanded = Attr(net, node, "IncloadExpanded").Bool(false);
+        return (expandable && expanded);
+        */
+        return Attr(net, node, "IncloadParent").Long() != null;
     }
 
     private static void layout(final CyNetworkView netView) {
@@ -183,7 +210,7 @@ public class CyActivator extends AbstractCyActivator {
             if (x != null) nodeView.setVisualProperty(BasicVisualLexicon.NODE_X_LOCATION, x.doubleValue());
             if (y != null) nodeView.setVisualProperty(BasicVisualLexicon.NODE_Y_LOCATION, y.doubleValue());
         }
-	vizMapMgr.getCurrentVisualStyle().apply(netView);
+        vizMapMgr.getCurrentVisualStyle().apply(netView);
     }
 
     private static void writeRequest(final Writer writer, final CyNode nodeToExpand, final CyNetwork net) throws JSONException {
@@ -210,8 +237,11 @@ public class CyActivator extends AbstractCyActivator {
         }
 
         public void run(final TaskMonitor monitor) throws Exception {
-            final CyNetwork net = netView.getModel();
-            final CyNode node = nodeView.getModel();
+            final CyNetwork     net     = netView.getModel();
+            final CySubNetwork  subnet  = (CySubNetwork) net;
+            final CyRootNetwork rootnet = subnet.getRootNetwork();
+            final CyNode        node    = nodeView.getModel();
+            final long          nodeSUID = node.getSUID();
 
             final String url = Attr(net, "IncloadURL").Str();
             final HttpURLConnection urlconn = (HttpURLConnection) (new URL(url)).openConnection();
@@ -228,25 +258,69 @@ public class CyActivator extends AbstractCyActivator {
             final JSONObject jInput = new JSONObject(new JSONTokener(reader));
             reader.close();
 
-            //final CyRootNetwork rootNet = ((CySubNetwork) net).getRootNetwork();
-            final String expandOnNodeAttr = Attr(net, "IncloadNodeColumn").Str();
             final JSONNetworkReader.Result result = JSONNetworkReader.read(jInput, net);
+            for (final CyNode childNode : result.newNodes)
+                Attr(net, childNode, "IncloadParent").set(nodeSUID);
+
+            Attr(net, node, "IncloadExpanded").set(true);
+            subnet.removeEdges(net.getAdjacentEdgeList(node, CyEdge.Type.ANY));
+            subnet.removeNodes(Collections.singleton(node));
+
             eventHelper.flushPayloadEvents();
-
-            //printNodes("nodes:", net, result.nodes);
-            //printNodes("new nodes:", net, result.newNodes);
-
-            final CyGroup group = grpFct.createGroup(net, node, result.newNodes, result.newEdges, true);
-            group.collapse(net);
-            eventHelper.flushPayloadEvents();
-
-            dumpGroup(net, group);
+            layout(netView);
         }
 
         public void cancel() {}
     }
 
-    private static void printNodes(final String prefix, final CyNetwork net, List<CyNode> nodes) {
+    private static class CollapseAndRemoveTask implements Task {
+        final View<CyNode> nodeView;
+        final CyNetworkView netView;
+
+        public CollapseAndRemoveTask(View<CyNode> nodeView, CyNetworkView netView) {
+            this.nodeView = nodeView;
+            this.netView = netView;
+        }
+
+        public void run(final TaskMonitor monitor) throws Exception {
+            final CyNetwork     net     = netView.getModel();
+            final CySubNetwork  subnet  = (CySubNetwork) net;
+            final CyRootNetwork rootnet = subnet.getRootNetwork();
+            final CyTable       nodetbl = net.getDefaultNodeTable();
+
+            final Long parentSUID = Attr(net, nodeView.getModel(), "IncloadParent").Long();
+            final Set<CyNode> siblings = Utils.getNodesWithValue(net, nodetbl, "IncloadParent", parentSUID);
+            final Set<Long> siblingSUIDs = new HashSet<Long>(siblings.size());
+            for (final CyNode sibling : siblings)
+                siblingSUIDs.add(sibling.getSUID());
+
+            // delete all table info
+            nodetbl.deleteRows(siblingSUIDs);
+
+            // delete the nodes from subnetwork
+            subnet.removeNodes(siblings);
+            rootnet.removeNodes(siblings);
+
+            final CyNode parentNode = rootnet.getNode(parentSUID);
+
+            // add the parent from the root network back into the subnetwork
+            subnet.addNode(parentNode);
+
+            // add parent node's edges back into subnetwork
+            for (final CyEdge edge : rootnet.getAdjacentEdgeIterable(parentNode, CyEdge.Type.ANY)) {
+                if (subnet.containsNode(edge.getSource()) && subnet.containsNode(edge.getTarget())) {
+                    subnet.addEdge(edge);
+                }
+            }
+
+            eventHelper.flushPayloadEvents();
+            layout(netView);
+        }
+
+        public void cancel() {}
+    }
+
+    private static void printNodes(final String prefix, final CyNetwork net, Iterable<CyNode> nodes) {
         System.out.print(prefix);
         System.out.print(' ');
         for (final CyNode node : nodes) {

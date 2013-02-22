@@ -39,23 +39,26 @@
 
 (def node-locations
   ; name   x   y
-  '{a   [120  30]
-    b   [  0  60]
-    c   [  0  30]
+  '{a   [360  90]
+    b   [  0 180]
+    c   [  0  90]
     d   [  0   0]
-    n1  [ 60  30]
-    n2  [ 60 100]
-    n11 [ 30  30]
-    n12 [ 60  30]
-    n13 [ 90  30]
-    n14 [120  30]
-    n21 [ 60  60]
-    n22 [ 60  90]
-    n23 [ 30  90]
-    n24 [  0  90]})
+    n1  [250  90]
+    n2  [250 300]
+    n11 [300  90]
+    n12 [250  90]
+    n13 [200  90]
+    n14 [150  90]
+    n21 [250 180]
+    n22 [250 240]
+    n23 [300 240]
+    n24 [360 240]})
 
 (defn expandable? [node]
   (contains? subnets node))
+
+(def node-cols
+  ["x" "y" "IncloadExpandable"])
 
 (defn node-info [node]
   (conj (node-locations node) (expandable? node)))
@@ -66,7 +69,7 @@
         (contains? nodes trg))))
 
 (defn mk-root-network []
-    (build-network root-net node-info ["x" "y" "expandable?"]))
+    (build-network root-net node-info node-cols))
 
 (defn mk-subnetwork [node expanded-nodes]
   (let [edges (subnets node)]
@@ -79,7 +82,7 @@
         (println in-edges)
         (println relevant-ex-edges)
         (json-response
-            (build-network all-edges node-info ["x" "y" "expandable?"]))))))
+            (build-network all-edges node-info node-cols))))))
 
 (def service-info
   {:input "all-expanded-nodes"

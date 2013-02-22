@@ -413,4 +413,21 @@ public class Attr {
     public Double Double() {
         return Double(null);
     }
+
+    /**
+     * Obtain the attribute as a number.
+     * If there is no attribute for the given column,
+     * this will return the default value.
+     */
+    public Number Number(final Number defaultValue) {
+        final Number val = row().get(column, Number.class);
+        return val != null ? val : defaultValue;
+    }
+
+    /**
+     * Obtain the attribute as a boolean.
+     */
+    public Number Number() {
+        return Number(null);
+    }
 }
