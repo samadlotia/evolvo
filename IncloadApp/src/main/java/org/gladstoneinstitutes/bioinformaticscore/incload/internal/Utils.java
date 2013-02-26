@@ -15,6 +15,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -31,6 +32,7 @@ import org.cytoscape.model.CyNetworkFactory;
 import org.cytoscape.model.CyNetworkManager;
 import org.cytoscape.model.CyNetwork;
 import org.cytoscape.model.CyNode;
+import org.cytoscape.model.CyIdentifiable;
 import org.cytoscape.model.CyEdge;
 import org.cytoscape.model.CyTable;
 import org.cytoscape.model.CyColumn;
@@ -127,6 +129,8 @@ class Utils {
     public static Set<CyNode> getNodesWithValue(
             final CyNetwork net, final CyTable table,
             final String colname, final Object value) {
+        if (table.getColumn(colname) == null)
+            return Collections.emptySet();
         final Collection<CyRow> matchingRows = table.getMatchingRows(colname, value);
         final Set<CyNode> nodes = new HashSet<CyNode>();
         final String primaryKeyColname = table.getPrimaryKey().getName();
@@ -155,5 +159,13 @@ class Utils {
 
     public static CyNode getNodeWithName(final CyNetwork net, final String name) {
         return getNodeWithValue(net, net.getDefaultNodeTable(), "name", name);
+    }
+
+    public static Set<Long> toSUIDs(final Iterable<? extends CyIdentifiable> netObjs) {
+        final Set<Long> suids = new HashSet<Long>();
+        for (final CyIdentifiable netObj : netObjs) {
+            suids.add(netObj.getSUID());
+        }
+        return suids;
     }
 }

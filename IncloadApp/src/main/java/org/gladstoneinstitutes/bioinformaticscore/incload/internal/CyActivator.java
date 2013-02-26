@@ -3,6 +3,7 @@ package org.gladstoneinstitutes.bioinformaticscore.incload.internal;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.io.InputStream;
 import java.io.IOException;
 import java.io.BufferedReader;
@@ -141,7 +142,7 @@ public class CyActivator extends AbstractCyActivator {
 
         registerService(bc, new NodeViewTaskFactory() {
             public TaskIterator createTaskIterator(View<CyNode> nodeView, CyNetworkView netView) {
-                return new TaskIterator(new CollapseAndRemoveTask(nodeView, netView));
+                return new TaskIterator(new CollapseTask(nodeView, netView, true));
             }
 
             public boolean isReady(View<CyNode> nodeView, CyNetworkView netView) {
@@ -149,7 +150,21 @@ public class CyActivator extends AbstractCyActivator {
             }
 
         }, NodeViewTaskFactory.class, ezProps(
-            TITLE, "Incload: Collapse & Remove",
+            TITLE, "Incload: Collapse & Clear",
+            PREFERRED_MENU, "Apps"
+        ));
+
+        registerService(bc, new NodeViewTaskFactory() {
+            public TaskIterator createTaskIterator(View<CyNode> nodeView, CyNetworkView netView) {
+                return new TaskIterator(new CollapseTask(nodeView, netView, false));
+            }
+
+            public boolean isReady(View<CyNode> nodeView, CyNetworkView netView) {
+                return isCollapsable(netView.getModel(), nodeView.getModel());
+            }
+
+        }, NodeViewTaskFactory.class, ezProps(
+            TITLE, "Incload: Collapse",
             PREFERRED_MENU, "Apps"
         ));
     }
@@ -207,8 +222,10 @@ public class CyActivator extends AbstractCyActivator {
             final CyRow row = net.getRow(node);
             final Number x = row.get("x", Number.class);
             final Number y = row.get("y", Number.class);
-            if (x != null) nodeView.setVisualProperty(BasicVisualLexicon.NODE_X_LOCATION, x.doubleValue());
-            if (y != null) nodeView.setVisualProperty(BasicVisualLexicon.NODE_Y_LOCATION, y.doubleValue());
+            if (x != null && y != null) {
+                nodeView.setVisualProperty(BasicVisualLexicon.NODE_X_LOCATION, x.doubleValue());
+                nodeView.setVisualProperty(BasicVisualLexicon.NODE_Y_LOCATION, y.doubleValue());
+            }
         }
         vizMapMgr.getCurrentVisualStyle().apply(netView);
     }
@@ -227,6 +244,42 @@ public class CyActivator extends AbstractCyActivator {
         output.endArray().endObject();
     }
 
+    private static void expandFromRootNetwork(final CyNetwork net, final CyNode node) {
+        final CySubNetwork subnet = (CySubNetwork) net;
+        final CyRootNetwork rootnet = subnet.getRootNetwork();
+        final Set<CyNode> children = Utils.getNodesWithValue(rootnet, net.getDefaultNodeTable(), "IncloadParent", node.getSUID());
+        
+        for (final CyNode child : children)
+            subnet.addNode(child);
+
+        for (final CyNode child : children)
+            for (final CyEdge edge : rootnet.getAdjacentEdgeIterable(child, CyEdge.Type.ANY))
+                if (subnet.containsNode(edge.getSource()) && subnet.containsNode(edge.getTarget()))
+                    subnet.addEdge(edge);
+    }
+
+    private static void expandFromURL(final CyNetwork net, final CyNode node) throws MalformedURLException, IOException, JSONException, JSONNetworkReader.InvalidContentsException {
+        final String url = Attr(net, "IncloadURL").Str();
+        final HttpURLConnection urlconn = (HttpURLConnection) (new URL(url)).openConnection();
+        urlconn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+        urlconn.setDoOutput(true);
+        urlconn.setDoInput(true);
+        urlconn.connect();
+
+        final BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(urlconn.getOutputStream()));
+        writeRequest(writer, node, net);
+        writer.close();
+
+        final Reader reader = new InputStreamReader(urlconn.getInputStream());
+        final JSONObject jInput = new JSONObject(new JSONTokener(reader));
+        reader.close();
+
+        final JSONNetworkReader.Result result = JSONNetworkReader.read(jInput, net);
+        for (final CyNode childNode : result.newNodes)
+            Attr(net, childNode, "IncloadParent").set(node.getSUID());
+
+    }
+
     private static class ExpandTask implements Task {
         final View<CyNode> nodeView;
         final CyNetworkView netView;
@@ -241,45 +294,47 @@ public class CyActivator extends AbstractCyActivator {
             final CySubNetwork  subnet  = (CySubNetwork) net;
             final CyRootNetwork rootnet = subnet.getRootNetwork();
             final CyNode        node    = nodeView.getModel();
-            final long          nodeSUID = node.getSUID();
 
-            final String url = Attr(net, "IncloadURL").Str();
-            final HttpURLConnection urlconn = (HttpURLConnection) (new URL(url)).openConnection();
-            urlconn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            urlconn.setDoOutput(true);
-            urlconn.setDoInput(true);
-            urlconn.connect();
+            /*
+            System.out.println();
+            System.out.println("PRE-EXPAND:");
+            dumpNet(rootnet, rootnet.getTable(CyNode.class, CyRootNetwork.SHARED_ATTRS));
+            System.out.println("================================");
+            */
 
-            final BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(urlconn.getOutputStream()));
-            writeRequest(writer, node, net);
-            writer.close();
 
-            final Reader reader = new InputStreamReader(urlconn.getInputStream());
-            final JSONObject jInput = new JSONObject(new JSONTokener(reader));
-            reader.close();
-
-            final JSONNetworkReader.Result result = JSONNetworkReader.read(jInput, net);
-            for (final CyNode childNode : result.newNodes)
-                Attr(net, childNode, "IncloadParent").set(nodeSUID);
+            final Set<CyNode> children = Utils.getNodesWithValue(rootnet, net.getDefaultNodeTable(), "IncloadParent", node.getSUID());
+            System.out.println("Number of children: " + children.size());
+            if (children.size() == 0)
+                expandFromURL(net, node);
+            else
+                expandFromRootNetwork(net, node);
 
             Attr(net, node, "IncloadExpanded").set(true);
-            subnet.removeEdges(net.getAdjacentEdgeList(node, CyEdge.Type.ANY));
-            subnet.removeNodes(Collections.singleton(node));
-
+            net.removeEdges(net.getAdjacentEdgeList(node, CyEdge.Type.ANY));
+            net.removeNodes(Collections.singleton(node));
             eventHelper.flushPayloadEvents();
             layout(netView);
+
+            /*
+            System.out.println("POST-EXPAND:");
+            dumpNet(rootnet, rootnet.getTable(CyNode.class, CyRootNetwork.SHARED_ATTRS));
+            System.out.println("================================");
+            */
         }
 
         public void cancel() {}
     }
 
-    private static class CollapseAndRemoveTask implements Task {
+    private static class CollapseTask implements Task {
         final View<CyNode> nodeView;
         final CyNetworkView netView;
+        final boolean clear;
 
-        public CollapseAndRemoveTask(View<CyNode> nodeView, CyNetworkView netView) {
+        public CollapseTask(View<CyNode> nodeView, CyNetworkView netView, boolean clear) {
             this.nodeView = nodeView;
             this.netView = netView;
+            this.clear = clear;
         }
 
         public void run(final TaskMonitor monitor) throws Exception {
@@ -288,18 +343,24 @@ public class CyActivator extends AbstractCyActivator {
             final CyRootNetwork rootnet = subnet.getRootNetwork();
             final CyTable       nodetbl = net.getDefaultNodeTable();
 
+            /*
+            System.out.println("PRE-COLLAPSE:");
+            dumpNet(rootnet, rootnet.getTable(CyNode.class, CyRootNetwork.SHARED_ATTRS));
+            System.out.println("================================");
+            */
+
             final Long parentSUID = Attr(net, nodeView.getModel(), "IncloadParent").Long();
             final Set<CyNode> siblings = Utils.getNodesWithValue(net, nodetbl, "IncloadParent", parentSUID);
-            final Set<Long> siblingSUIDs = new HashSet<Long>(siblings.size());
-            for (final CyNode sibling : siblings)
-                siblingSUIDs.add(sibling.getSUID());
-
-            // delete all table info
-            nodetbl.deleteRows(siblingSUIDs);
+            final Set<Long> siblingSUIDs = Utils.toSUIDs(siblings);
 
             // delete the nodes from subnetwork
             subnet.removeNodes(siblings);
-            rootnet.removeNodes(siblings);
+
+            if (clear) {
+                // delete all table info
+                nodetbl.deleteRows(siblingSUIDs);
+                rootnet.removeNodes(siblings);
+            }
 
             final CyNode parentNode = rootnet.getNode(parentSUID);
 
@@ -307,19 +368,51 @@ public class CyActivator extends AbstractCyActivator {
             subnet.addNode(parentNode);
 
             // add parent node's edges back into subnetwork
-            for (final CyEdge edge : rootnet.getAdjacentEdgeIterable(parentNode, CyEdge.Type.ANY)) {
-                if (subnet.containsNode(edge.getSource()) && subnet.containsNode(edge.getTarget())) {
+            for (final CyEdge edge : rootnet.getAdjacentEdgeIterable(parentNode, CyEdge.Type.ANY))
+                if (subnet.containsNode(edge.getSource()) && subnet.containsNode(edge.getTarget()))
                     subnet.addEdge(edge);
-                }
-            }
+
+            Attr(net, parentNode, "IncloadExpanded").set(false);
 
             eventHelper.flushPayloadEvents();
             layout(netView);
+
+            /*
+            System.out.println("POST-COLLAPSE:");
+            dumpNet(rootnet, rootnet.getTable(CyNode.class, CyRootNetwork.SHARED_ATTRS));
+            System.out.println("================================");
+            */
         }
 
         public void cancel() {}
     }
 
+    /*
+    private static void dumpNet(final CyNetwork net, final CyTable table) {
+        System.out.println("Nodes:");
+        for (final CyNode node : net.getNodeList()) {
+            System.out.println(String.format(
+                        "\t%s (%d)",
+                        table.getRow(node.getSUID()).get("shared name", String.class),
+                        node.getSUID()));
+        }
+
+        System.out.println("Edges:");
+        for (final CyEdge edge : net.getEdgeList()) {
+            final CyNode src = edge.getSource();
+            final CyNode trg = edge.getTarget();
+            System.out.println(String.format(
+                        "\t%d:\t%s (%d) ->\t%s (%d)",
+                        edge.getSUID(),
+                        table.getRow(src.getSUID()).get("shared name", String.class),
+                        src.getSUID(),
+                        table.getRow(trg.getSUID()).get("shared name", String.class),
+                        trg.getSUID()));
+        }
+    }
+    */
+
+    /*
     private static void printNodes(final String prefix, final CyNetwork net, Iterable<CyNode> nodes) {
         System.out.print(prefix);
         System.out.print(' ');
@@ -351,4 +444,5 @@ public class CyActivator extends AbstractCyActivator {
             System.out.println(String.format("  %d - %s <-> %s", edge.getSUID(), Attr(net, edge.getSource(), "name"), Attr(net, edge.getTarget(), "name")));
         }
     }
+    */
 }

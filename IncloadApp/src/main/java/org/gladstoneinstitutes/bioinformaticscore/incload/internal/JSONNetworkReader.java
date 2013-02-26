@@ -323,7 +323,7 @@ class JSONNetworkReader {
             CyEdge edge;
             if (duplicateEdges || !net.containsEdge(src, trg)) {
                 edge = net.addEdge(src, trg, directedEdges);
-                System.out.println(String.format("New edge: %s <-> %s", Attr.Attr(net, src, "name"), Attr.Attr(net, trg, "name")));
+                //System.out.println(String.format("New edge: %s <-> %s", Attr.Attr(net, src, "name"), Attr.Attr(net, trg, "name")));
                 result.newEdges.add(edge);
             } else {
                 final List<CyEdge> possibleEdges = net.getConnectingEdgeList(src, trg, edgeType);
