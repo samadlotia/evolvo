@@ -1,12 +1,15 @@
-(ns BasicIncloadServer.util)
+(ns srv-example.util)
 
-(use '[cheshire.core :only [generate-string]])
+(use '[clojure.string     :only [capitalize]])
+(use '[cheshire.core      :only [generate-string]])
 (use '[ring.util.response :only [response content-type header status]])
 
 (defn add-header [service-info]
   (if (nil? service-info)
     identity
-    #(header % "Incload-Info" (generate-string service-info))))
+    (fn [response]
+      (doseq [[k v] service-info]
+        (header response (str "Evolvo-" (capitalize k)) v)))))
 
 (defn json-response [service-response & [service-info]]
   (->

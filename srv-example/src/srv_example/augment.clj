@@ -1,8 +1,8 @@
-(ns BasicIncloadServer.expand_from_node)
+(ns srv-example.augment)
 
-(use '[BasicIncloadServer.util :only (json-response bad-request-response build-network)])
+(use '[srv-example.util :only (json-response bad-request-response build-network)])
 
-(def network
+(def all-edges
   '[[d b]
     [a b]
     [b c]
@@ -30,22 +30,21 @@
 (def root-nodes (set '[a b c d]))
 
 (defn edges-between [nodes]
-  (let [is-edge-in-nodes (fn [[src trg]] (and (contains? nodes src) (contains? nodes trg)))]
-    (filter is-edge-in-nodes network)))
+  (let [is-edge-in-nodes
+        (fn [[src trg]] (and (contains? nodes src)
+                             (contains? nodes trg)))]
+    (filter is-edge-in-nodes all-edges)))
 
 (defn adj-edges [node]
-  (let [is-node-in-edge (fn [[src trg]] (or (= node src) (= node trg)))]
-    (filter is-node-in-edge network)))
+  (let [is-node-in-edge
+        (fn [[src trg]] (or (= node src)
+                            (= node trg)))]
+    (filter is-node-in-edge all-edges)))
 
 (defn adj-nodes [node adj-edges]
-  (let [opposite-node (fn [[src trg]] (if (= node src) trg src))]
+  (let [opposite-node
+        (fn [[src trg]] (if (= node src) trg src))]
     (map opposite-node adj-edges)))
-
-(defn sym-edges-to-indices [nodes edges]
-  (let [indices (zipmap nodes (range))]
-    (map (fn [[src trg]] [(get indices src)
-                          (get indices trg)])
-         edges)))
 
 (defn root-network []
   (build-network
@@ -55,8 +54,7 @@
   (build-network (adj-edges node)))
 
 (def service-info
-  {:input "node-to-expand"
-   :action "expand"})
+  {:action "action"})
 
 (defn respond [params]
   (if (contains? params "node")

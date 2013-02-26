@@ -1,8 +1,8 @@
-(ns BasicIncloadServer.expand_and_replace)
+(ns srv-example.replace)
 
-(use '[BasicIncloadServer.util :only [json-response bad-request-response build-network]])
+(use '[srv-example.util :only [json-response bad-request-response build-network]])
 
-(def root-net
+(def rootnet
   '[[ a n1]
     [n1  b]
     [n1  c]
@@ -68,8 +68,14 @@
     (or (contains? nodes src)
         (contains? nodes trg))))
 
+(def service-info
+  {:action "replace"
+   :node-column "name"})
+
 (defn mk-root-network []
-    (build-network root-net node-info node-cols))
+  (json-response
+    (build-network rootnet node-info node-cols)
+    service-info))
 
 (defn mk-subnetwork [node expanded-nodes]
   (let [edges (subnets node)]
@@ -79,19 +85,15 @@
             ex-edges (:external edges)
             relevant-ex-edges (filter #(any-node-in-edge? expanded-nodes %) ex-edges)
             all-edges (concat in-edges relevant-ex-edges)]
-        (println in-edges)
-        (println relevant-ex-edges)
         (json-response
             (build-network all-edges node-info node-cols))))))
 
-(def service-info
-  {:input "all-expanded-nodes"
-   :action "expand-and-replace"
-   :node-column "name"})
-
 (defn respond [params]
-  (if (contains? params "node")
-    (let [node (symbol (params "node"))
-          expanded-nodes (set (map symbol (params "expanded-nodes")))]
-      (mk-subnetwork node (set expanded-nodes)))
-    (json-response (mk-root-network) service-info)))
+  (if (empty? params)
+    (if (and (contains? params "node")
+             (contains? params "nodes"))
+      (let [node  (symbol (params "node"))
+            nodes (set (map symbol (params "nodes")))]
+        (mk-subnetwork node (set nodes)))
+      (bad-request-response "no node or nodes specifid"))
+    (mk-root-network)))
