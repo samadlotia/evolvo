@@ -65,7 +65,7 @@ import static org.cytoscape.work.ServiceProperties.*;
 
 import org.cytoscape.task.NodeViewTaskFactory;
 
-import static org.gladstoneinstitutes.bioinformaticscore.incload.internal.Attr.*;
+import static EvolvoApp.internal.Attr.*;
 
 class Utils {
     public static void applyLayout(final CyNetworkView netView, final String layoutName, final TaskIterator iterator) {
