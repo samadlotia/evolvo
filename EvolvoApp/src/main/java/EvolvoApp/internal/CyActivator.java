@@ -1,4 +1,4 @@
-package org.gladstoneinstitutes.bioinformaticscore.incload.internal;
+package EvolvoApp.internal;
 
 import java.net.URL;
 import java.net.URLConnection;
@@ -76,7 +76,7 @@ import static org.cytoscape.work.ServiceProperties.*;
 
 import org.cytoscape.task.NodeViewTaskFactory;
 
-import static org.gladstoneinstitutes.bioinformaticscore.incload.internal.Attr.*;
+import static EvolvoApp.internal.Attr.*;
 
 public class CyActivator extends AbstractCyActivator {
     static final Logger logger = LoggerFactory.getLogger("CyUserMessages");

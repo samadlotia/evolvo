@@ -1,7 +1,7 @@
 Getting Started
 ===============
 
-Set Up BasicIncloadServer
+Set up srv-example
 --------------------------
 
  1. Install Leiningen, which is like Maven for Clojure projects.
@@ -9,7 +9,7 @@ Set Up BasicIncloadServer
 
         brew install leiningen 
 
- 1. In the `BasicInloadServer` directory, start the server:
+ 1. In the `srv-example` directory, start the server:
 
         lein run
 
@@ -19,22 +19,22 @@ The server should now be running. You can ensure that it's running with `curl`:
 
 You should then be getting some JSON back.
 
-Set up IncloadApp
+Set up EvolvoApp
 -----------------
 
- 1. In the `IncloadApp` directory, type:
+ 1. In the `EvolvoApp` directory, type:
 
         mvn clean install
 
- 1. Copy the IncloadApp jar to CytoscapeConfiguration:
+ 1. Copy the EvolvoApp jar to CytoscapeConfiguration:
 
-        cp target/IncloadApp-0.1.jar ~/CytoscapeConfiguration/3/apps/installed/
+        cp target/EvolvoApp-0.1.jar ~/CytoscapeConfiguration/3/apps/installed/
 
-Running Incload
+Running Evolvo
 ---------------
 
- 1. After starting Cytoscape, go to the menu bar and select *Apps* > *Incload*.
+ 1. After starting Cytoscape, go to the menu bar and select *Apps* > *Evolvo: Open Network*.
  At the URL prompt, you should see `http://localhost:8000`. Click *OK*.
 
- 1. Right click on a node, and choose *Apps* > *Incload: Expand*.
- Choose *Apps* > *Incload: Collapse* to do the reverse.
+ 1. Right click on a node, and choose *Apps* > *Evolvo: Expand*.
+ Choose *Apps* > *Evolvo: Collapse* to do the reverse.

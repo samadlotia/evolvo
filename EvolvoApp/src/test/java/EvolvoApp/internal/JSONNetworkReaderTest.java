@@ -1,4 +1,4 @@
-package org.gladstoneinstitutes.bioinformaticscore.incload.internal;
+package EvolvoApp.internal;
 
 import static org.junit.Assert.*;
 import org.junit.Test;

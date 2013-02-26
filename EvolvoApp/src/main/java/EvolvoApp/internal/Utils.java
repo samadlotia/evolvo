@@ -1,5 +1,4 @@
-
-package org.gladstoneinstitutes.bioinformaticscore.incload.internal;
+package EvolvoApp.internal;
 
 import java.net.URL;
 import java.net.URLConnection;
