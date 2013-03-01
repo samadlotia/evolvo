@@ -16,49 +16,38 @@ import org.codehaus.jackson.JsonParseException;
 
 class JsonTableReader {
     public static interface Delegate {
-        public void header(String[] cols) throws InvalidJsonTableException;
-        public void row(Object[] elems, Class[] types) throws InvalidJsonTableException;
-        public void done() throws InvalidJsonTableException;
+        public void header(String[] cols) throws InvalidJsonException;
+        public void row(Object[] elems, Class[] types) throws InvalidJsonException;
+        public void done() throws InvalidJsonException;
     }
 
-
-    // wrapper around readInternal for prefixing exception messages with parser location
-    public static void read(final JsonParser p, final Delegate delegate) throws IOException, JsonParseException, InvalidJsonTableException {
-        try {
-            readInternal(p, delegate);
-        } catch (InvalidJsonTableException e) {
-            final JsonLocation loc = p.getCurrentLocation();
-            throw new InvalidJsonTableException(e, String.format("Line %d, col %d: %s", loc.getLineNr(), loc.getColumnNr(), e.getMessage()));
-        }
-    }
-
-    private static void readInternal(final JsonParser p, final Delegate delegate) throws IOException, JsonParseException, InvalidJsonTableException {
+    public static void read(final JsonParser p, final Delegate delegate) throws IOException, JsonParseException, InvalidJsonException {
         JsonToken t = null;
 
         t = p.nextToken(); // start of table
         if (t == null)
-            throw new InvalidJsonTableException("unexpected end of output");
+            throw new InvalidJsonException("unexpected end of output");
         else if (!t.equals(JsonToken.START_ARRAY)) // start of table array
-            throw new InvalidJsonTableException("table must be an array");
+            throw new InvalidJsonException("table must be an array");
 
         t = p.nextToken(); // start of header or end of table array
         if (t == null)
-            throw new InvalidJsonTableException("unexpected end of output");
+            throw new InvalidJsonException("unexpected end of output");
         else if (t.equals(JsonToken.END_ARRAY))
             return; // the table is just an empty array, so just exit
         else if (!t.equals(JsonToken.START_ARRAY))
-            throw new InvalidJsonTableException("first element in table must be the header array");
+            throw new InvalidJsonException("first element in table must be the header array");
 
         // we're in the header, so loop thru each header element
         final List<String> columnNamesList = new ArrayList<String>();
         while (true) {
             t = p.nextToken(); // get an element from the header array
             if (t == null)
-                throw new InvalidJsonTableException("unexpected end of output");
+                throw new InvalidJsonException("unexpected end of output");
             else if (t.equals(JsonToken.END_ARRAY))
                 break;
             else if (!t.equals(JsonToken.VALUE_STRING))
-                throw new InvalidJsonTableException("header array can only contain strings");
+                throw new InvalidJsonException("header array can only contain strings");
             columnNamesList.add(p.getText());
         }
         if (columnNamesList.size() == 0) // empty header, so just exit
@@ -74,31 +63,30 @@ class JsonTableReader {
         while (true) {
             t = p.nextToken(); // get a row
             if (t == null)
-                throw new InvalidJsonTableException("unexpected end of output");
+                throw new InvalidJsonException("unexpected end of output");
             else if (t.equals(JsonToken.END_ARRAY))
                 break;
             else if (!t.equals(JsonToken.START_ARRAY))
-                throw new InvalidJsonTableException("rows can only be arrays");
+                throw new InvalidJsonException("rows can only be arrays");
 
             // loop thru each element in row
             int elemIndex = 0;
             while (true) {
                 t = p.nextToken(); // get an element in the row
-                if (t == null) {
-                    throw new InvalidJsonTableException("unexpected end of output");
-                } else if (t.equals(JsonToken.END_ARRAY)) {
+                if (t == null)
+                    throw new InvalidJsonException("unexpected end of output");
+                else if (t.equals(JsonToken.END_ARRAY))
                     break;
-                }
 
                 if (elemIndex >= elems.length)
-                    throw new InvalidJsonTableException("row has more than %d elements", elems.length);
+                    throw new InvalidJsonException("row has more than %d elements", elems.length);
 
                 extractElem(p, t, elems, types, elemIndex);
 
                 elemIndex++;
             }
             if (elemIndex < elems.length)
-                throw new InvalidJsonTableException("row has %d elements but header has %d elements", elemIndex, elems.length);
+                throw new InvalidJsonException("row has %d elements but header has %d elements", elemIndex, elems.length);
 
             delegate.row(elems, types);
         }
@@ -106,7 +94,7 @@ class JsonTableReader {
         delegate.done();
     }
 
-    private static void extractElem(final JsonParser p, final JsonToken t, final Object[] elems, final Class[] types, final int elemIndex) throws IOException, InvalidJsonTableException {
+    private static void extractElem(final JsonParser p, final JsonToken t, final Object[] elems, final Class[] types, final int elemIndex) throws IOException, InvalidJsonException {
         Object elem;
         Class type;
         if (t.equals(JsonToken.VALUE_NULL)) {
@@ -121,11 +109,14 @@ class JsonTableReader {
         } else if (t.equals(JsonToken.VALUE_STRING)) {
             elem = p.getText();
             type = String.class;
-        } else if (t.equals(JsonToken.VALUE_NUMBER_INT) || t.equals(JsonToken.VALUE_NUMBER_FLOAT)) {
-            elem = p.getNumberValue();
-            type = Number.class;
+        } else if (t.equals(JsonToken.VALUE_NUMBER_INT)) {
+            elem = new Long(p.getLongValue());
+            type = Long.class;
+        } else if (t.equals(JsonToken.VALUE_NUMBER_FLOAT)) {
+            elem = new Double(p.getDoubleValue());
+            type = Double.class;
         } else {
-            throw new InvalidJsonTableException("row elements can only be these primitives: null, booleans, strings, and numbers");
+            throw new InvalidJsonException("row elements can only be these primitives: null, booleans, strings, and numbers");
         }
 
         final Class expectedType = types[elemIndex];
@@ -133,7 +124,7 @@ class JsonTableReader {
             if (expectedType == null) {
                 types[elemIndex] = type;
             } else if (!expectedType.equals(type)) {
-                throw new InvalidJsonTableException("row element has type '%s' but is expected to be '%s'", type, expectedType);
+                throw new InvalidJsonException("row element has type '%s' but is expected to be '%s'", type, expectedType);
             }
         }
 

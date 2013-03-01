@@ -113,6 +113,7 @@ public class CyActivator extends AbstractCyActivator {
         eventHelper = getService(bc, CyEventHelper.class);
         vizMapMgr = getService(bc, VisualMappingManager.class);
 
+        /*
         registerService(bc, new TaskFactory() {
             public TaskIterator createTaskIterator() {
                 return new TaskIterator(new LoadNetworkTask());
@@ -167,8 +168,10 @@ public class CyActivator extends AbstractCyActivator {
             TITLE, "Incload: Collapse",
             PREFERRED_MENU, "Apps"
         ));
+        */
     }
 
+    /*
     public static class LoadNetworkTask implements Task {
         @Tunable(description="URL")
         public String url = "http://localhost:8000/expand_and_replace";
@@ -199,19 +202,12 @@ public class CyActivator extends AbstractCyActivator {
     }
 
     private static boolean isExpandable(final CyNetwork net, final CyNode node) {
-        //System.out.println(String.format("Node: %s, expandable?: %s", Attr(net, node, "name"), Attr(net, node, "expandable?")));
         final boolean expandable = Attr(net, node, "IncloadExpandable").Bool(false);
         final boolean expanded = Attr(net, node, "IncloadExpanded").Bool(false);
         return (expandable && !expanded);
     }
 
     private static boolean isCollapsable(final CyNetwork net, final CyNode node) {
-        //System.out.println(String.format("Node: %s, expandable?: %s", Attr(net, node, "name"), Attr(net, node, "expandable?")));
-        /*
-        final boolean expandable = Attr(net, node, "IncloadExpandable").Bool(false);
-        final boolean expanded = Attr(net, node, "IncloadExpanded").Bool(false);
-        return (expandable && expanded);
-        */
         return Attr(net, node, "IncloadParent").Long() != null;
     }
 
@@ -295,14 +291,6 @@ public class CyActivator extends AbstractCyActivator {
             final CyRootNetwork rootnet = subnet.getRootNetwork();
             final CyNode        node    = nodeView.getModel();
 
-            /*
-            System.out.println();
-            System.out.println("PRE-EXPAND:");
-            dumpNet(rootnet, rootnet.getTable(CyNode.class, CyRootNetwork.SHARED_ATTRS));
-            System.out.println("================================");
-            */
-
-
             final Set<CyNode> children = Utils.getNodesWithValue(rootnet, net.getDefaultNodeTable(), "IncloadParent", node.getSUID());
             System.out.println("Number of children: " + children.size());
             if (children.size() == 0)
@@ -316,11 +304,6 @@ public class CyActivator extends AbstractCyActivator {
             eventHelper.flushPayloadEvents();
             layout(netView);
 
-            /*
-            System.out.println("POST-EXPAND:");
-            dumpNet(rootnet, rootnet.getTable(CyNode.class, CyRootNetwork.SHARED_ATTRS));
-            System.out.println("================================");
-            */
         }
 
         public void cancel() {}
@@ -342,12 +325,6 @@ public class CyActivator extends AbstractCyActivator {
             final CySubNetwork  subnet  = (CySubNetwork) net;
             final CyRootNetwork rootnet = subnet.getRootNetwork();
             final CyTable       nodetbl = net.getDefaultNodeTable();
-
-            /*
-            System.out.println("PRE-COLLAPSE:");
-            dumpNet(rootnet, rootnet.getTable(CyNode.class, CyRootNetwork.SHARED_ATTRS));
-            System.out.println("================================");
-            */
 
             final Long parentSUID = Attr(net, nodeView.getModel(), "IncloadParent").Long();
             final Set<CyNode> siblings = Utils.getNodesWithValue(net, nodetbl, "IncloadParent", parentSUID);
@@ -376,16 +353,11 @@ public class CyActivator extends AbstractCyActivator {
 
             eventHelper.flushPayloadEvents();
             layout(netView);
-
-            /*
-            System.out.println("POST-COLLAPSE:");
-            dumpNet(rootnet, rootnet.getTable(CyNode.class, CyRootNetwork.SHARED_ATTRS));
-            System.out.println("================================");
-            */
         }
 
         public void cancel() {}
     }
+    */
 
     /*
     private static void dumpNet(final CyNetwork net, final CyTable table) {

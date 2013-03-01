@@ -67,7 +67,7 @@ import org.cytoscape.task.NodeViewTaskFactory;
 
 import static EvolvoApp.internal.Attr.*;
 
-class Utils {
+public class Utils {
     public static void applyLayout(final CyNetworkView netView, final String layoutName, final TaskIterator iterator) {
         final CyLayoutAlgorithm alg = CyActivator.layoutMgr.getLayout(layoutName);
         final Set<View<CyNode>> nodes = new HashSet<View<CyNode>>(netView.getNodeViews());
