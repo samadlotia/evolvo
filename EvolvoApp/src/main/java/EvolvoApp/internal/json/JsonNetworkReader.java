@@ -140,12 +140,10 @@ class JsonNetworkReader {
     public static class BasicAttrHandler<T extends CyIdentifiable> implements AttrHandler<T> {
         final CyTable table;
         final int startIndex;
-        final int skipIndex;
 
-        public BasicAttrHandler(final CyTable table, final int startIndex, final int skipIndex) {
+        public BasicAttrHandler(final CyTable table, final int startIndex) {
             this.table = table;
             this.startIndex = startIndex;
-            this.skipIndex = skipIndex;
         }
 
         String[] colNames = null;
@@ -157,8 +155,6 @@ class JsonNetworkReader {
 
         public void row(T netObj, Object[] row, Class[] types) throws InvalidJsonException {
             for (int col = startIndex; col < row.length; col++) {
-                if (col == skipIndex) continue;
-
                 final Object elem = row[col];
                 if (elem == null) continue;
                 final String colName = colNames[col];
@@ -179,6 +175,58 @@ class JsonNetworkReader {
                 table.getRow(netObj.getSUID()).set(colName, type.cast(elem));
             }
         }
+    }
+
+    public static class NodeAttrHandler extends BasicAttrHandler<CyNode> {
+        public NodeAttrHandler(final CyNetwork net) {
+            super(net.getDefaultNodeTable(), 0);
+        }
+    }
+
+    public static class EdgeAttrHandler extends BasicAttrHandler<CyEdge> {
+        public EdgeAttrHandler(final CyNetwork net) {
+            super(net.getDefaultEdgeTable(), 2);
+        }
+    }
+
+    public static class NetworkAttrHandler extends BasicAttrHandler<CyNetwork> {
+        public NetworkAttrHandler(final CyNetwork net) {
+            super(net.getDefaultNetworkTable(), 0);
+        }
+    }
+
+    public static void read(
+            final JsonParser                p,
+            final CyNetwork                 net)
+        throws InvalidJsonException, JsonParseException, IOException {
+
+        read(   p,
+                net,
+                new BasicNodeFactory(net), 
+                new NodeAttrHandler(net),
+                new BasicEdgeFactory(net, false, false),
+                new EdgeAttrHandler(net),
+                new NetworkAttrHandler(net));
+    }
+
+    public static void read(
+            final JsonParser                p,
+            final CyNetwork                 net,
+            final NodeFactory               nodeFactory,
+            final String                    expandOnNodeAttribute)
+        throws InvalidJsonException, JsonParseException, IOException {
+
+        read(   p,
+                net,
+                new NonDuplicatingNodeFactory(
+                    nodeFactory,
+                    net,
+                    net.getDefaultNodeTable(),
+                    expandOnNodeAttribute), 
+                new NodeAttrHandler(net),
+                new BasicEdgeFactory(net, false, false),
+                new EdgeAttrHandler(net),
+                new NetworkAttrHandler(net));
     }
 
     public static void read(
@@ -239,5 +287,11 @@ class JsonNetworkReader {
 
             public void done() {}
         });
+
+        t = p.nextToken(); // end of network array
+        if (t == null)
+            throw new InvalidJsonException("unexpected end of output");
+        else if (!t.equals(JsonToken.END_ARRAY))
+            throw new InvalidJsonException("only three elements allowed in network array");
     }
 }

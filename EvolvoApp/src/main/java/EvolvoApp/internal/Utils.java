@@ -8,11 +8,6 @@ import java.io.IOException;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 
-import org.json.JSONTokener;
-import org.json.JSONObject;
-import org.json.JSONArray;
-import org.json.JSONException;
-
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;

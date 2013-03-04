@@ -158,12 +158,6 @@
             <version>1.5.2</version>
             <scope>compile</scope>
         </dependency>
-        <dependency>
-            <groupId>org.json</groupId>
-            <artifactId>org.json</artifactId>
-            <version>chargebee-1.0</version>
-            <scope>compile</scope>
-        </dependency>
 		<dependency>
 			<groupId>org.cytoscape</groupId>
 			<artifactId>model-impl</artifactId>

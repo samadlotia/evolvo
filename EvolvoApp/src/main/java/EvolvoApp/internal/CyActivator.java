@@ -14,13 +14,6 @@ import java.io.BufferedWriter;
 import java.io.Writer;
 import java.io.Reader;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
-import org.json.JSONTokener;
-import org.json.JSONWriter;
-import org.json.JSONStringer;
-import org.json.JSONException;
-
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 
