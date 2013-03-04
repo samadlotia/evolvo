@@ -16,7 +16,7 @@
 
 (defn handler [request]
   (let [path (rest (clojure.string/split (:uri request) #"\/+"))]
-    (if (nil? path)
+    (if (empty? path)
       (not-found "no service specified")
       (let [service-name   (first path)
             service-params (if (= (:request-method request) :post)

@@ -4,18 +4,20 @@
 (use '[cheshire.core      :only [generate-string]])
 (use '[ring.util.response :only [response content-type header status]])
 
-(defn add-header [service-info]
-  (if (nil? service-info)
-    identity
-    (fn [response]
-      (doseq [[k v] service-info]
-        (header response (str "Evolvo-" (capitalize k)) v)))))
+(defn add-service-headers [response service-info]
+  (if (empty? service-info)
+    response
+    (let [[header-name header-val] (first service-info)
+          proper-header-name (str "Evolvo-" (capitalize header-name))]
+      (add-service-headers
+        (header response proper-header-name header-val)
+        (rest service-info)))))
 
 (defn json-response [service-response & [service-info]]
   (->
     (response (generate-string service-response))
     (content-type "application/json")
-    ((add-header service-info))))
+    (add-service-headers service-info)))
 
 (defn bad-request-response [body]
   (->
@@ -25,11 +27,12 @@
 (defn build-network [edges & [node-attrs node-attrs-header]]
   (let [nodes-array (distinct (flatten edges))
         node-indices (zipmap nodes-array (range))]
-    {:nodes
+    [
      (if (or (nil? node-attrs) (nil? node-attrs-header))
        (cons '[name]
              (map vector nodes-array))
        (cons (cons 'name node-attrs-header)
              (map #(cons % (node-attrs %)) nodes-array)))
-     :edges (cons '[src trg] (map (fn [[src trg]] [(node-indices src) (node-indices trg)]) edges))
-     :expand-on-node-attribute "name"}))
+     (cons '[src trg] (map (fn [[src trg]] [(node-indices src) (node-indices trg)]) edges))
+     []
+     ]))

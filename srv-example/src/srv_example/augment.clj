@@ -54,7 +54,7 @@
   (build-network (adj-edges node)))
 
 (def service-info
-  {:action "action"})
+  {:action "augment"})
 
 (defn respond [params]
   (if (contains? params "node")
