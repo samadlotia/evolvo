@@ -3,6 +3,7 @@
 (use '[srv-example.util :only (json-response bad-request-response build-network)])
 
 (def all-edges
+  "These edges constitute the entire, fully-expanded network."
   '[[d b]
     [a b]
     [b c]
@@ -27,36 +28,42 @@
     [c f]
     [b k]])
 
-(def root-nodes (set '[a b c d]))
+(def root-nodes
+  "The nodes that constitute the root network; the root network's edges are inferred from all-edges."
+  '#{a b c d})
 
-(defn edges-between [nodes]
-  (let [is-edge-in-nodes
-        (fn [[src trg]] (and (contains? nodes src)
-                             (contains? nodes trg)))]
-    (filter is-edge-in-nodes all-edges)))
-
-(defn adj-edges [node]
+(defn adj-edges [nodes edges internal-only]
+  "Returns a seq of edges that are adjacent to the given nodes; nodes must be a set."
   (let [is-node-in-edge
-        (fn [[src trg]] (or (= node src)
-                            (= node trg)))]
-    (filter is-node-in-edge all-edges)))
+        (fn [edge] ((if internal-only every? some)
+                      #(contains? nodes %)
+                      edge))]
+    (filter is-node-in-edge edges)))
 
-(defn adj-nodes [node adj-edges]
-  (let [opposite-node
-        (fn [[src trg]] (if (= node src) trg src))]
-    (map opposite-node adj-edges)))
+(defn extant-edges [target-node extant-nodes]
+  (let [target-adj-edges (adj-edges #{target-node} all-edges false)
+        target-adj-nodes (set (flatten target-adj-edges))
+        extant-adj-edges (adj-edges extant-nodes all-edges false)]
+    (adj-edges target-adj-nodes extant-adj-edges false)))
 
 (defn root-network []
-  (build-network
-    (edges-between root-nodes)))
+  (->
+    root-nodes
+    (adj-edges all-edges true)
+    build-network))
 
-(defn child-network [node]
-  (build-network (adj-edges node)))
+(defn child-network [target-node extant-nodes]
+  (->
+    #{target-node}
+    (adj-edges all-edges false)
+    (concat (extant-edges target-node extant-nodes))
+    build-network))
 
 (def service-info
   {:action "augment"})
 
 (defn respond [params]
-  (if (contains? params "node")
-    (json-response (child-network (symbol (get params "node"))))
+  (if (contains? params "target")
+    (let [target (symbol (get params "target"))]
+      (json-response (child-network target)))
     (json-response (root-network) service-info)))
