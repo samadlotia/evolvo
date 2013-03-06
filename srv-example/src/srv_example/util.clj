@@ -8,14 +8,17 @@
   (if (empty? service-info)
     response
     (let [[header-name header-val] (first service-info)
-          proper-header-name (str "Evolvo-" (capitalize header-name))]
+          proper-header-name (->> header-name
+                               name
+                               (str "Evolvo-"))]
       (add-service-headers
         (header response proper-header-name header-val)
         (rest service-info)))))
 
 (defn json-response [service-response & [service-info]]
-  (->
-    (response (generate-string service-response))
+  (-> service-response
+    generate-string
+    response
     (content-type "application/json")
     (add-service-headers service-info)))
 

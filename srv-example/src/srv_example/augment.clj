@@ -31,11 +31,16 @@
     [b k]])
 
 (def root-nodes
-  "The nodes that constitute the root network; the root network's edges are inferred from all-edges."
+  "The nodes that constitute the root network.
+  The root network's edges are inferred from all-edges."
   '#{a b c d})
 
 (defn adj-edges [nodes edges internal-only]
-  "Returns a seq of edges that are adjacent to the given nodes; nodes must be a set."
+  "Returns a subset of the given edges for ones that are adjacent to the given nodes.
+   Args:
+    nodes: a set of symbols of nodes
+    edges: a seq of edge pairs to filter; typically this is all-edges
+    internal-only: if true, both source and target of each edge must be in the nodes set"
   (let [is-node-in-edge
         (fn [edge] ((if internal-only every? some)
                       #(contains? nodes %)
@@ -43,10 +48,11 @@
     (filter is-node-in-edge edges)))
 
 (defn extant-edges [target-node extant-nodes]
-  (let [target-adj-edges (adj-edges #{target-node} all-edges false)
-        target-adj-nodes (set (flatten target-adj-edges))
-        extant-adj-edges (adj-edges extant-nodes all-edges false)]
-    (adj-edges target-adj-nodes extant-adj-edges false)))
+  "Returns a seq of edges between extant-nodes and nodes adjacent to target-node."
+  (let [target-adj-edges (adj-edges #{target-node} all-edges false) ; edges from target
+        target-adj-nodes (set (flatten target-adj-edges))           ; all nodes adjacent to target
+        extant-adj-edges (adj-edges extant-nodes all-edges false)]  ; all edges adjacent to extant-nodes
+    (adj-edges target-adj-nodes extant-adj-edges false)))           ; only extant-adj-edges that have target-adj-nodes
 
 (defn root-network []
   (->
@@ -58,11 +64,13 @@
   (->
     #{target-node}
     (adj-edges all-edges false)
-    (concat (extant-edges target-node extant-nodes))
+    (concat (extant-edges target-node extant-nodes)) ; append extant edges
+    distinct ; remove potentially duplicate edges
     build-network))
 
 (def service-info
-  {"action" "augment"})
+  {:action "augment"
+   :node-column "name"})
 
 (defn respond [params]
   (if (contains? params "target")

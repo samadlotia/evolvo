@@ -1,15 +1,16 @@
 (ns srv-example.replace)
 
 (use '[srv-example.util :only [json-response bad-request-response build-network]])
+(use '[cheshire.core    :only [parse-string]])
 
-(def rootnet
+(def root-net
   '[[ a n1]
     [n1  b]
     [n1  c]
     [n1  d]
     [n1 n2]])
 
-(def subnets
+(def sub-nets
   '{
     n1 {:internal [
                    [n11 n12]
@@ -55,10 +56,10 @@
     n24 [360 240]})
 
 (defn expandable? [node]
-  (contains? subnets node))
+  (contains? sub-nets node))
 
 (def node-cols
-  ["x" "y" "IncloadExpandable"])
+  ["x" "y" "expandable"])
 
 (defn node-info [node]
   (conj (node-locations node) (expandable? node)))
@@ -72,28 +73,26 @@
   {:action "replace"
    :node-column "name"})
 
-(defn mk-root-network []
+(defn root-network []
   (json-response
-    (build-network rootnet node-info node-cols)
+    (build-network root-net node-info node-cols)
     service-info))
 
-(defn mk-subnetwork [node expanded-nodes]
-  (let [edges (subnets node)]
+(defn child-network [target extant-nodes]
+  (let [edges (sub-nets target)]
     (if (nil? edges)
       (bad-request-response "node is not expandable")
       (let [in-edges (:internal edges)
             ex-edges (:external edges)
-            relevant-ex-edges (filter #(any-node-in-edge? expanded-nodes %) ex-edges)
-            all-edges (concat in-edges relevant-ex-edges)]
+            relevant-ex-edges (filter #(any-node-in-edge? extant-nodes %) ex-edges) ; only external edges that hit any extant-nodes
+            all-edges (concat in-edges relevant-ex-edges)] ; internal edges + relevant external edges
         (json-response
             (build-network all-edges node-info node-cols))))))
 
 (defn respond [params]
-  (if (empty? params)
-    (if (and (contains? params "node")
-             (contains? params "nodes"))
-      (let [node  (symbol (params "node"))
-            nodes (set (map symbol (params "nodes")))]
-        (mk-subnetwork node (set nodes)))
-      (bad-request-response "no node or nodes specifid"))
-    (mk-root-network)))
+  (if (contains? params "target")
+    (let [target (symbol (params "target"))
+          extant-nodes-str (params "extant-nodes")
+          extant-nodes (if extant-nodes-str (set (map symbol (parse-string extant-nodes-str))) #{})]
+      (child-network target extant-nodes))
+    (root-network)))
