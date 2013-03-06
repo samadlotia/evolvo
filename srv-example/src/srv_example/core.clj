@@ -5,6 +5,7 @@
 (use '[ring.util.response     :only [not-found response]])
 (use '[cheshire.core          :only [parse-stream]])
 (use '[clojure.java.io        :only [reader]])
+(use '[clojure.string         :only [split]])
 
 (require 'srv-example.augment)
 (require 'srv-example.replace)
@@ -15,7 +16,7 @@
    })
 
 (defn handler [request]
-  (let [path (rest (clojure.string/split (:uri request) #"\/+"))]
+  (let [path (rest (split (:uri request) #"\/+"))]
     (if (empty? path)
       (not-found "no service specified")
       (let [service-name   (first path)

@@ -1,6 +1,8 @@
 (ns srv-example.augment)
 
 (use '[srv-example.util :only (json-response bad-request-response build-network)])
+(use '[clojure.string   :only [split]])
+(use '[cheshire.core    :only [parse-string]])
 
 (def all-edges
   "These edges constitute the entire, fully-expanded network."
@@ -60,10 +62,12 @@
     build-network))
 
 (def service-info
-  {:action "augment"})
+  {"action" "augment"})
 
 (defn respond [params]
   (if (contains? params "target")
-    (let [target (symbol (get params "target"))]
-      (json-response (child-network target)))
+    (let [target (symbol (get params "target"))
+          extant-nodes-str (get params "extant-nodes")
+          extant-nodes (if extant-nodes-str (set (map symbol (parse-string extant-nodes-str))) #{})]
+      (json-response (child-network target extant-nodes)))
     (json-response (root-network) service-info)))
