@@ -2,6 +2,7 @@
 
 (use '[srv-example.util :only (json-response bad-request-response build-network)])
 (use '[clojure.string   :only [split]])
+(use '[clojure.set      :only [union]])
 (use '[cheshire.core    :only [parse-string]])
 
 (def all-edges
@@ -49,10 +50,9 @@
 
 (defn extant-edges [target-node extant-nodes]
   "Returns a seq of edges between extant-nodes and nodes adjacent to target-node."
-  (let [target-adj-edges (adj-edges #{target-node} all-edges false) ; edges from target
-        target-adj-nodes (set (flatten target-adj-edges))           ; all nodes adjacent to target
-        extant-adj-edges (adj-edges extant-nodes all-edges false)]  ; all edges adjacent to extant-nodes
-    (adj-edges target-adj-nodes extant-adj-edges false)))           ; only extant-adj-edges that have target-adj-nodes
+  (let [adj-nodes  (disj (set (flatten (adj-edges #{target-node} all-edges false))) target-node)
+        deg2-edges (adj-edges adj-nodes all-edges false)]
+    (adj-edges (union extant-nodes adj-nodes) deg2-edges true)))
 
 (defn root-network []
   (->
@@ -61,6 +61,7 @@
     build-network))
 
 (defn child-network [target-node extant-nodes]
+  (prn target-node extant-nodes)
   (->
     #{target-node}
     (adj-edges all-edges false)
@@ -73,9 +74,10 @@
    :node-column "name"})
 
 (defn respond [params]
+  (prn params)
   (if (contains? params "target")
     (let [target (symbol (get params "target"))
           extant-nodes-str (get params "extant-nodes")
-          extant-nodes (if extant-nodes-str (set (map symbol (parse-string extant-nodes-str))) #{})]
+          extant-nodes (if extant-nodes-str (set (map symbol extant-nodes-str)) #{})]
       (json-response (child-network target extant-nodes)))
     (json-response (root-network) service-info)))

@@ -156,7 +156,7 @@ public class CyActivator extends AbstractCyActivator {
             }
 
         }, NodeViewTaskFactory.class, ezProps(
-            TITLE, "Incload: Collapse & Clear",
+            TITLE, "Evolvo: Collapse & Clear",
             PREFERRED_MENU, "Apps"
         ));
 
@@ -172,7 +172,7 @@ public class CyActivator extends AbstractCyActivator {
             }
 
         }, NodeViewTaskFactory.class, ezProps(
-            TITLE, "Incload: Collapse",
+            TITLE, "Evolvo: Collapse",
             PREFERRED_MENU, "Apps"
         ));
     }
@@ -208,7 +208,10 @@ public class CyActivator extends AbstractCyActivator {
     }
 
     private static boolean isExpandable(final CyNetwork net, final CyNode node) {
-        final boolean expandable = Attr(net, node, "expandable").Bool(false);
+        boolean expandable = true;
+        if (net.getDefaultNodeTable().getColumn("expandable") != null) {
+            expandable = Attr(net, node, "expandable").Bool(false);
+        }
         final boolean expanded = Attr(net, node, "expanded").Bool(false);
         return (expandable && !expanded);
     }
@@ -364,13 +367,15 @@ public class CyActivator extends AbstractCyActivator {
 
             final CyNode parentNode = rootnet.getNode(parentSUID);
 
-            // add the parent from the root network back into the subnetwork
-            subnet.addNode(parentNode);
+            if (replaceParentNode(net)) {
+                // add the parent from the root network back into the subnetwork
+                subnet.addNode(parentNode);
 
-            // add parent node's edges back into subnetwork
-            for (final CyEdge edge : rootnet.getAdjacentEdgeIterable(parentNode, CyEdge.Type.ANY))
-                if (subnet.containsNode(edge.getSource()) && subnet.containsNode(edge.getTarget()))
-                    subnet.addEdge(edge);
+                // add parent node's edges back into subnetwork
+                for (final CyEdge edge : rootnet.getAdjacentEdgeIterable(parentNode, CyEdge.Type.ANY))
+                    if (subnet.containsNode(edge.getSource()) && subnet.containsNode(edge.getTarget()))
+                        subnet.addEdge(edge);
+            }
 
             Attr(net, parentNode, "Evolvo-expanded").set(false);
 
