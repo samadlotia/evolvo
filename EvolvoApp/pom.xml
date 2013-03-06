@@ -9,7 +9,7 @@
 		<osgi.api.version>4.2.0</osgi.api.version>
 	</properties>
 
-	<groupId>EvolvoApp</groupId>
+	<groupId>evolvo</groupId>
 	<artifactId>EvolvoApp</artifactId>
 	<packaging>bundle</packaging>
 	<name>EvolvoApp</name>

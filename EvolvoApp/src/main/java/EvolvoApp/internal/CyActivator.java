@@ -69,7 +69,16 @@ import static org.cytoscape.work.ServiceProperties.*;
 
 import org.cytoscape.task.NodeViewTaskFactory;
 
+import org.codehaus.jackson.JsonFactory;
+import org.codehaus.jackson.JsonParser;
+import org.codehaus.jackson.JsonGenerator;
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonParseException;
+
 import static EvolvoApp.internal.Attr.*;
+
+import EvolvoApp.internal.json.JsonNetworkReader;
+import EvolvoApp.internal.json.InvalidJsonException;
 
 public class CyActivator extends AbstractCyActivator {
     static final Logger logger = LoggerFactory.getLogger("CyUserMessages");
@@ -106,17 +115,16 @@ public class CyActivator extends AbstractCyActivator {
         eventHelper = getService(bc, CyEventHelper.class);
         vizMapMgr = getService(bc, VisualMappingManager.class);
 
-        /*
         registerService(bc, new TaskFactory() {
             public TaskIterator createTaskIterator() {
-                return new TaskIterator(new LoadNetworkTask());
+                return new TaskIterator(new OpenNetworkTask());
             }
 
             public boolean isReady() {
                 return true;
             }
         }, TaskFactory.class, ezProps(
-            TITLE, "Incload",
+            TITLE, "Evolvo: Open network",
             PREFERRED_MENU, "Apps"
         ));
 
@@ -130,7 +138,7 @@ public class CyActivator extends AbstractCyActivator {
             }
 
         }, NodeViewTaskFactory.class, ezProps(
-            TITLE, "Incload: Expand",
+            TITLE, "Evolvo: Expand",
             PREFERRED_MENU, "Apps"
         ));
 
@@ -161,31 +169,31 @@ public class CyActivator extends AbstractCyActivator {
             TITLE, "Incload: Collapse",
             PREFERRED_MENU, "Apps"
         ));
-        */
     }
 
-    /*
-    public static class LoadNetworkTask implements Task {
+    private static final JsonFactory jsonFactory = new JsonFactory();
+
+    public static class OpenNetworkTask implements Task {
         @Tunable(description="URL")
-        public String url = "http://localhost:8000/expand_and_replace";
+        public String url = "http://localhost:8000/replace";
 
         public void run(final TaskMonitor monitor) throws Exception {
-            monitor.setTitle("Incload: Opening network");
-            monitor.setStatusMessage("Downloading from " + url);
-
-            final CyNetwork net = Utils.newNetwork(String.format("%s (Incremental Network)", url));
             final URLConnection urlconn = (new URL(url)).openConnection();
 
-            Attr(net, "IncloadURL").set(url);
-            JSONObject serviceParams = new JSONObject(new JSONTokener(urlconn.getHeaderField("Incload-Info")));
-            Attr(net, "IncloadInput").set(serviceParams.optString("input"));
-            Attr(net, "IncloadAction").set(serviceParams.optString("action"));
-            Attr(net, "IncloadNodeColumn").set(serviceParams.optString("node-column"));
+            monitor.setTitle("Evolvo: Opening network");
+            monitor.setStatusMessage(url);
+
+            final CyNetwork net = Utils.newNetwork(String.format("Evolvo: %s", url));
+
+            Attr(net, "Evolvo-url").set(url);
+            Attr(net, "Evolvo-action").set(urlconn.getHeaderField("Evolvo-action"));
+            Attr(net, "Evolvo-node-column").set(urlconn.getHeaderField("Evolvo-node-column"));
 
             final InputStream input = urlconn.getInputStream();
-            final JSONObject jInput = new JSONObject(new JSONTokener(new BufferedReader(new InputStreamReader(input))));
+            final JsonParser jsonParser = jsonFactory.createJsonParser(input);
+            JsonNetworkReader.read(jsonParser, net);
+            input.close();
 
-            JSONNetworkReader.read(jInput, net);
             eventHelper.flushPayloadEvents();
             final CyNetworkView netView = Utils.newNetworkView(net);
             layout(netView);
@@ -195,13 +203,13 @@ public class CyActivator extends AbstractCyActivator {
     }
 
     private static boolean isExpandable(final CyNetwork net, final CyNode node) {
-        final boolean expandable = Attr(net, node, "IncloadExpandable").Bool(false);
-        final boolean expanded = Attr(net, node, "IncloadExpanded").Bool(false);
+        final boolean expandable = Attr(net, node, "expandable").Bool(false);
+        final boolean expanded = Attr(net, node, "expanded").Bool(false);
         return (expandable && !expanded);
     }
 
     private static boolean isCollapsable(final CyNetwork net, final CyNode node) {
-        return Attr(net, node, "IncloadParent").Long() != null;
+        return Attr(net, node, "Evolvo-parent").Long() != null;
     }
 
     private static void layout(final CyNetworkView netView) {
@@ -219,24 +227,29 @@ public class CyActivator extends AbstractCyActivator {
         vizMapMgr.getCurrentVisualStyle().apply(netView);
     }
 
-    private static void writeRequest(final Writer writer, final CyNode nodeToExpand, final CyNetwork net) throws JSONException {
-        final String column = Attr(net, "IncloadNodeColumn").Str();
-        final JSONWriter output = new JSONWriter(writer);
-        output.object();
-        output.key("node").value(net.getRow(nodeToExpand).getRaw(column).toString());
-        output.key("expanded-nodes").array();
-        for (final CyNode node : net.getNodeList()) {
-            if (node.equals(nodeToExpand))
-                continue;
-            output.value(net.getRow(node).getRaw(column).toString());
+    private static void writeRequest(final Writer writer, final CyNode nodeToExpand, final CyNetwork net, final boolean includeExtantNodes) throws IOException, JsonGenerationException {
+        final String column = Attr(net, "Evolvo-node-column").Str();
+        final JsonGenerator output = jsonFactory.createJsonGenerator(writer);
+        output.writeStartObject();
+        output.writeStringField("target", net.getRow(nodeToExpand).getRaw(column).toString());
+        if (includeExtantNodes) {
+            output.writeFieldName("extant-nodes");
+            output.writeStartArray();
+            for (final CyNode node : net.getNodeList()) {
+                if (node.equals(nodeToExpand))
+                    continue;
+                output.writeString(net.getRow(node).getRaw(column).toString());
+            }
+            output.writeEndArray();
         }
-        output.endArray().endObject();
+        output.writeEndObject();
+        output.close();
     }
 
     private static void expandFromRootNetwork(final CyNetwork net, final CyNode node) {
         final CySubNetwork subnet = (CySubNetwork) net;
         final CyRootNetwork rootnet = subnet.getRootNetwork();
-        final Set<CyNode> children = Utils.getNodesWithValue(rootnet, net.getDefaultNodeTable(), "IncloadParent", node.getSUID());
+        final Set<CyNode> children = Utils.getNodesWithValue(rootnet, net.getDefaultNodeTable(), "Evolvo-parent", node.getSUID());
         
         for (final CyNode child : children)
             subnet.addNode(child);
@@ -247,8 +260,8 @@ public class CyActivator extends AbstractCyActivator {
                     subnet.addEdge(edge);
     }
 
-    private static void expandFromURL(final CyNetwork net, final CyNode node) throws MalformedURLException, IOException, JSONException, JSONNetworkReader.InvalidContentsException {
-        final String url = Attr(net, "IncloadURL").Str();
+    private static void expandFromURL(final CyNetwork net, final CyNode node) throws MalformedURLException, IOException, JsonParseException, JsonGenerationException, InvalidJsonException {
+        final String url = Attr(net, "Evolvo-url").Str();
         final HttpURLConnection urlconn = (HttpURLConnection) (new URL(url)).openConnection();
         urlconn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
         urlconn.setDoOutput(true);
@@ -256,17 +269,21 @@ public class CyActivator extends AbstractCyActivator {
         urlconn.connect();
 
         final BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(urlconn.getOutputStream()));
-        writeRequest(writer, node, net);
+        writeRequest(writer, node, net, true);
         writer.close();
 
         final Reader reader = new InputStreamReader(urlconn.getInputStream());
-        final JSONObject jInput = new JSONObject(new JSONTokener(reader));
+        final JsonParser jsonParser = jsonFactory.createJsonParser(reader);
+        JsonNetworkReader.read(jsonParser, net,
+                new JsonNetworkReader.BasicNodeFactory(net) {
+                    public CyNode create(Object[] row, Class[] types) {
+                        final CyNode childNode = super.create(row, types);
+                        Attr(net, childNode, "Evolvo-parent").set(node.getSUID());
+                        return childNode;
+                    }
+                },
+                Attr(net, "Evolvo-node-column").Str());
         reader.close();
-
-        final JSONNetworkReader.Result result = JSONNetworkReader.read(jInput, net);
-        for (final CyNode childNode : result.newNodes)
-            Attr(net, childNode, "IncloadParent").set(node.getSUID());
-
     }
 
     private static class ExpandTask implements Task {
@@ -284,19 +301,17 @@ public class CyActivator extends AbstractCyActivator {
             final CyRootNetwork rootnet = subnet.getRootNetwork();
             final CyNode        node    = nodeView.getModel();
 
-            final Set<CyNode> children = Utils.getNodesWithValue(rootnet, net.getDefaultNodeTable(), "IncloadParent", node.getSUID());
-            System.out.println("Number of children: " + children.size());
+            final Set<CyNode> children = Utils.getNodesWithValue(rootnet, net.getDefaultNodeTable(), "Evolvo-parent", node.getSUID());
             if (children.size() == 0)
                 expandFromURL(net, node);
             else
                 expandFromRootNetwork(net, node);
 
-            Attr(net, node, "IncloadExpanded").set(true);
+            Attr(net, node, "Evolvo-expanded").set(true);
             net.removeEdges(net.getAdjacentEdgeList(node, CyEdge.Type.ANY));
             net.removeNodes(Collections.singleton(node));
             eventHelper.flushPayloadEvents();
             layout(netView);
-
         }
 
         public void cancel() {}
@@ -319,8 +334,8 @@ public class CyActivator extends AbstractCyActivator {
             final CyRootNetwork rootnet = subnet.getRootNetwork();
             final CyTable       nodetbl = net.getDefaultNodeTable();
 
-            final Long parentSUID = Attr(net, nodeView.getModel(), "IncloadParent").Long();
-            final Set<CyNode> siblings = Utils.getNodesWithValue(net, nodetbl, "IncloadParent", parentSUID);
+            final Long parentSUID = Attr(net, nodeView.getModel(), "Evolvo-parent").Long();
+            final Set<CyNode> siblings = Utils.getNodesWithValue(net, nodetbl, "Evolvo-parent", parentSUID);
             final Set<Long> siblingSUIDs = Utils.toSUIDs(siblings);
 
             // delete the nodes from subnetwork
@@ -342,7 +357,7 @@ public class CyActivator extends AbstractCyActivator {
                 if (subnet.containsNode(edge.getSource()) && subnet.containsNode(edge.getTarget()))
                     subnet.addEdge(edge);
 
-            Attr(net, parentNode, "IncloadExpanded").set(false);
+            Attr(net, parentNode, "Evolvo-expanded").set(false);
 
             eventHelper.flushPayloadEvents();
             layout(netView);
@@ -350,7 +365,6 @@ public class CyActivator extends AbstractCyActivator {
 
         public void cancel() {}
     }
-    */
 
     /*
     private static void dumpNet(final CyNetwork net, final CyTable table) {

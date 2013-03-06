@@ -21,7 +21,7 @@ import org.codehaus.jackson.JsonParseException;
 
 import EvolvoApp.internal.Utils;
 
-class JsonNetworkReader {
+public class JsonNetworkReader {
     public static interface NodeFactory {
         public void header(String[] cols) throws InvalidJsonException;
         public CyNode create(Object[] row, Class[] types) throws InvalidJsonException;

@@ -79,6 +79,7 @@
     service-info))
 
 (defn child-network [target extant-nodes]
+  (prn target extant-nodes)
   (let [edges (sub-nets target)]
     (if (nil? edges)
       (bad-request-response "node is not expandable")
@@ -90,9 +91,10 @@
             (build-network all-edges node-info node-cols))))))
 
 (defn respond [params]
+  (prn params)
   (if (contains? params "target")
     (let [target (symbol (params "target"))
-          extant-nodes-str (params "extant-nodes")
-          extant-nodes (if extant-nodes-str (set (map symbol (parse-string extant-nodes-str))) #{})]
-      (child-network target extant-nodes))
+          extant-nodes (params "extant-nodes")
+          extant-nodes-syms (if extant-nodes (set (map symbol extant-nodes)) #{})]
+      (child-network target extant-nodes-syms))
     (root-network)))
