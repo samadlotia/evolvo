@@ -48,24 +48,22 @@
                       edge))]
     (filter is-node-in-edge edges)))
 
-(defn extant-edges [target-node extant-nodes]
+(defn indirect-edges [target-node extant-nodes]
   "Returns a seq of edges between extant-nodes and nodes adjacent to target-node."
   (let [adj-nodes  (disj (set (flatten (adj-edges #{target-node} all-edges false))) target-node)
         deg2-edges (adj-edges adj-nodes all-edges false)]
     (adj-edges (union extant-nodes adj-nodes) deg2-edges true)))
 
 (defn root-network []
-  (->
-    root-nodes
+  (-> root-nodes
     (adj-edges all-edges true)
     build-network))
 
 (defn child-network [target-node extant-nodes]
   (prn target-node extant-nodes)
-  (->
-    #{target-node}
+  (-> #{target-node}
     (adj-edges all-edges false)
-    (concat (extant-edges target-node extant-nodes)) ; append extant edges
+    (concat (indirect-edges target-node extant-nodes)) ; append indirect edges
     distinct ; remove potentially duplicate edges
     build-network))
 

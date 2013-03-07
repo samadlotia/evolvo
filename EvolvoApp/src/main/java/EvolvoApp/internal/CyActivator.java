@@ -117,7 +117,9 @@ public class CyActivator extends AbstractCyActivator {
 
         registerService(bc, new TaskFactory() {
             public TaskIterator createTaskIterator() {
-                return new TaskIterator(new OpenNetworkTask());
+                TaskIterator taskIterator = new TaskIterator();
+                taskIterator.append(new OpenNetworkTask(taskIterator));
+                return taskIterator;
             }
 
             public boolean isReady() {
@@ -131,7 +133,7 @@ public class CyActivator extends AbstractCyActivator {
         registerService(bc, new NodeViewTaskFactory() {
             public TaskIterator createTaskIterator(View<CyNode> nodeView, CyNetworkView netView) {
                 final TaskIterator taskIterator = new TaskIterator(new ExpandTask(nodeView, netView));
-                layout(netView, taskIterator);
+                taskIterator.append(new LayoutTask(netView, taskIterator));
                 return taskIterator;
             }
 
@@ -147,7 +149,7 @@ public class CyActivator extends AbstractCyActivator {
         registerService(bc, new NodeViewTaskFactory() {
             public TaskIterator createTaskIterator(View<CyNode> nodeView, CyNetworkView netView) {
                 final TaskIterator taskIterator = new TaskIterator(new CollapseTask(nodeView, netView, true));
-                layout(netView, taskIterator);
+                taskIterator.append(new LayoutTask(netView, taskIterator));
                 return taskIterator;
             }
 
@@ -163,7 +165,7 @@ public class CyActivator extends AbstractCyActivator {
         registerService(bc, new NodeViewTaskFactory() {
             public TaskIterator createTaskIterator(View<CyNode> nodeView, CyNetworkView netView) {
                 final TaskIterator taskIterator = new TaskIterator(new CollapseTask(nodeView, netView, false));
-                layout(netView, taskIterator);
+                taskIterator.append(new LayoutTask(netView, taskIterator));
                 return taskIterator;
             }
 
@@ -180,8 +182,14 @@ public class CyActivator extends AbstractCyActivator {
     private static final JsonFactory jsonFactory = new JsonFactory();
 
     public static class OpenNetworkTask implements Task {
+        final TaskIterator taskIterator;
+
+        public OpenNetworkTask(final TaskIterator taskIterator) {
+            this.taskIterator = taskIterator;
+        }
+
         @Tunable(description="URL")
-        public String url = "http://localhost:8000/augment";
+        public String url = "http://localhost:8000/replace";
 
         public void run(final TaskMonitor monitor) throws Exception {
             final URLConnection urlconn = (new URL(url)).openConnection();
@@ -202,6 +210,11 @@ public class CyActivator extends AbstractCyActivator {
 
             eventHelper.flushPayloadEvents();
             final CyNetworkView netView = Utils.newNetworkView(net);
+            taskIterator.append(new LayoutTask(netView, taskIterator));
+
+            System.out.println();
+            System.out.println("OpenNetworkTask");
+            dumpNet(net);
         }
 
         public void cancel() {}
@@ -220,23 +233,35 @@ public class CyActivator extends AbstractCyActivator {
         return Attr(net, node, "Evolvo-parent").Long() != null;
     }
 
-    private static void layout(final CyNetworkView netView, final TaskIterator taskIterator) {
-        final CyNetwork net = netView.getModel();
-        if (net.getDefaultNodeTable().getColumn("x") == null || net.getDefaultNodeTable().getColumn("y") == null) {
-            Utils.applyLayout(netView, "hierarchical", taskIterator);
-        } else {
-            for (final CyNode node : net.getNodeList()) {
-                final View<CyNode> nodeView = netView.getNodeView(node);
-                final CyRow row = net.getRow(node);
-                final Number x = row.get("x", Number.class);
-                final Number y = row.get("y", Number.class);
-                if (x != null && y != null) {
-                    nodeView.setVisualProperty(BasicVisualLexicon.NODE_X_LOCATION, x.doubleValue());
-                    nodeView.setVisualProperty(BasicVisualLexicon.NODE_Y_LOCATION, y.doubleValue());
+    private static class LayoutTask implements Task {
+        final CyNetworkView netView;
+        final TaskIterator taskIterator;
+        public LayoutTask(final CyNetworkView netView, final TaskIterator taskIterator) {
+            this.netView = netView;
+            this.taskIterator = taskIterator;
+        }
+
+        public void run(TaskMonitor monitor) {
+            final CyNetwork net = netView.getModel();
+            final CyTable nodeTable = net.getDefaultNodeTable();
+            if (nodeTable.getColumn("x") == null || nodeTable.getColumn("y") == null) {
+                Utils.applyLayout(netView, "hierarchical", taskIterator);
+            } else {
+                for (final CyNode node : net.getNodeList()) {
+                    final View<CyNode> nodeView = netView.getNodeView(node);
+                    final CyRow row = nodeTable.getRow(node.getSUID());
+                    final Number x = row.get("x", Number.class);
+                    final Number y = row.get("y", Number.class);
+                    if (x != null && y != null) {
+                        nodeView.setVisualProperty(BasicVisualLexicon.NODE_X_LOCATION, x.doubleValue());
+                        nodeView.setVisualProperty(BasicVisualLexicon.NODE_Y_LOCATION, y.doubleValue());
+                    }
                 }
             }
+            vizMapMgr.getCurrentVisualStyle().apply(netView);
         }
-        vizMapMgr.getCurrentVisualStyle().apply(netView);
+
+        public void cancel() {}
     }
 
     private static void writeRequest(final Writer writer, final CyNode nodeToExpand, final CyNetwork net, final boolean includeExtantNodes) throws IOException, JsonGenerationException {
@@ -330,6 +355,10 @@ public class CyActivator extends AbstractCyActivator {
                 net.removeNodes(Collections.singleton(node));
             }
             eventHelper.flushPayloadEvents();
+
+            System.out.println();
+            System.out.println("ExpandTask: " + children.size());
+            dumpNet(net);
         }
 
         public void cancel() {}
@@ -380,18 +409,24 @@ public class CyActivator extends AbstractCyActivator {
             Attr(net, parentNode, "Evolvo-expanded").set(false);
 
             eventHelper.flushPayloadEvents();
+
+            System.out.println();
+            System.out.println("CollapseTask");
+            dumpNet(net);
         }
 
         public void cancel() {}
     }
 
-    /*
-    private static void dumpNet(final CyNetwork net, final CyTable table) {
+    private static void dumpNet(final CyNetwork subnet) {
+        final CyRootNetwork net = ((CySubNetwork) subnet).getRootNetwork();
+        final CyTable table = subnet.getDefaultNodeTable();
         System.out.println("Nodes:");
         for (final CyNode node : net.getNodeList()) {
             System.out.println(String.format(
-                        "\t%s (%d)",
+                        "\t%s%c (%d)",
                         table.getRow(node.getSUID()).get("shared name", String.class),
+                        subnet.containsNode(node) ? '*' : ' ',
                         node.getSUID()));
         }
 
@@ -400,15 +435,15 @@ public class CyActivator extends AbstractCyActivator {
             final CyNode src = edge.getSource();
             final CyNode trg = edge.getTarget();
             System.out.println(String.format(
-                        "\t%d:\t%s (%d) ->\t%s (%d)",
+                        "\t%d:\t%s (%d) ->\t%s (%d)%c",
                         edge.getSUID(),
                         table.getRow(src.getSUID()).get("shared name", String.class),
                         src.getSUID(),
                         table.getRow(trg.getSUID()).get("shared name", String.class),
-                        trg.getSUID()));
+                        trg.getSUID(),
+                        subnet.containsEdge(edge) ? '*' : ' '));
         }
     }
-    */
 
     /*
     private static void printNodes(final String prefix, final CyNetwork net, Iterable<CyNode> nodes) {

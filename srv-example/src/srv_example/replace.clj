@@ -79,7 +79,7 @@
     service-info))
 
 (defn child-network [target extant-nodes]
-  ;(prn target extant-nodes)
+  (prn target extant-nodes)
   (let [edges (sub-nets target)]
     (if (nil? edges)
       (bad-request-response "node is not expandable")
@@ -87,6 +87,7 @@
             ex-edges (:external edges)
             relevant-ex-edges (filter #(any-node-in-edge? extant-nodes %) ex-edges) ; only external edges that hit any extant-nodes
             all-edges (concat in-edges relevant-ex-edges)] ; internal edges + relevant external edges
+        (prn all-edges)
         (json-response
             (build-network all-edges node-info node-cols))))))
 
