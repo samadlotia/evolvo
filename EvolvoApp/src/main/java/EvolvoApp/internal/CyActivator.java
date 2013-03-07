@@ -202,6 +202,7 @@ public class CyActivator extends AbstractCyActivator {
             Attr(net, "Evolvo-url").set(url);
             Attr(net, "Evolvo-action").set(urlconn.getHeaderField("Evolvo-action"));
             Attr(net, "Evolvo-node-column").set(urlconn.getHeaderField("Evolvo-node-column"));
+            net.getDefaultNetworkTable().createListColumn("Evolvo-hidden-parents", Long.class, false, new ArrayList<Long>());
 
             final InputStream input = urlconn.getInputStream();
             final JsonParser jsonParser = jsonFactory.createJsonParser(input);
@@ -264,7 +265,14 @@ public class CyActivator extends AbstractCyActivator {
         public void cancel() {}
     }
 
-    private static void writeRequest(final Writer writer, final CyNode nodeToExpand, final CyNetwork net, final boolean includeExtantNodes) throws IOException, JsonGenerationException {
+    private static void writeRequest(
+            final Writer writer,
+            final CyNode nodeToExpand,
+            final CyNetwork net,
+            final CyTable nodeTable,
+            final boolean includeExtantNodes
+            ) throws IOException, JsonGenerationException {
+
         final String column = Attr(net, "Evolvo-node-column").Str();
         final JsonGenerator output = jsonFactory.createJsonGenerator(writer);
         output.writeStartObject();
@@ -275,7 +283,10 @@ public class CyActivator extends AbstractCyActivator {
             for (final CyNode node : net.getNodeList()) {
                 if (node.equals(nodeToExpand))
                     continue;
-                output.writeString(net.getRow(node).getRaw(column).toString());
+                output.writeString(nodeTable.getRow(node.getSUID()).getRaw(column).toString());
+            }
+            for (final Long hiddenParentSUID : net.getRow(net).getList("Evolvo-hidden-parents", Long.class)) {
+                output.writeString(nodeTable.getRow(hiddenParentSUID).getRaw(column).toString());
             }
             output.writeEndArray();
         }
@@ -298,6 +309,9 @@ public class CyActivator extends AbstractCyActivator {
     }
 
     private static void expandFromURL(final CyNetwork net, final CyNode node) throws MalformedURLException, IOException, JsonParseException, JsonGenerationException, InvalidJsonException {
+        final CySubNetwork  subnet  = (CySubNetwork) net;
+        final CyRootNetwork rootnet = subnet.getRootNetwork();
+
         final String url = Attr(net, "Evolvo-url").Str();
         final HttpURLConnection urlconn = (HttpURLConnection) (new URL(url)).openConnection();
         urlconn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
@@ -306,25 +320,53 @@ public class CyActivator extends AbstractCyActivator {
         urlconn.connect();
 
         final BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(urlconn.getOutputStream()));
-        writeRequest(writer, node, net, true);
+        writeRequest(writer, node, net, net.getDefaultNodeTable(), true);
         writer.close();
 
         final Reader reader = new InputStreamReader(urlconn.getInputStream());
         final JsonParser jsonParser = jsonFactory.createJsonParser(reader);
         JsonNetworkReader.read(jsonParser, net,
-                new JsonNetworkReader.BasicNodeFactory(net) {
-                    public CyNode create(Object[] row, Class[] types) {
-                        final CyNode childNode = super.create(row, types);
-                        Attr(net, childNode, "Evolvo-parent").set(node.getSUID());
-                        return childNode;
+                new JsonNetworkReader.NonDuplicatingNodeFactory(
+                    new JsonNetworkReader.BasicNodeFactory(net) {
+                        public CyNode create(Object[] row, Class[] types) {
+                            final CyNode childNode = super.create(row, types);
+                            Attr(net, childNode, "Evolvo-parent").set(node.getSUID());
+                            return childNode;
+                        }
+                    },
+                    rootnet,
+                    net.getDefaultNodeTable(),
+                    Attr(net, "Evolvo-node-column").Str()),
+                new JsonNetworkReader.NodeAttrHandler(net),
+                new JsonNetworkReader.BasicEdgeFactory(rootnet, false, false) {
+                    public CyEdge create(Object[] row, Class[] types) throws InvalidJsonException {
+                        final CyEdge edge = super.create(row, types);
+                        if (subnet.containsNode(edge.getSource()) && subnet.containsNode(edge.getTarget()))
+                            subnet.addEdge(edge);
+                        return edge;
                     }
                 },
-                Attr(net, "Evolvo-node-column").Str());
+                new JsonNetworkReader.EdgeAttrHandler(net),
+                new JsonNetworkReader.NetworkAttrHandler(net));
         reader.close();
     }
 
     private static boolean replaceParentNode(final CyNetwork net) {
         return "replace".equals(Attr(net, "Evolvo-action").Str());
+    }
+
+    private static void addToHiddenParents(final CyNetwork net, final CyNode parentNode) {
+        final CyRow netRow = net.getRow(net);
+        final List<Long> hiddenParents = netRow.getList("Evolvo-hidden-parents", Long.class);
+        hiddenParents.add(parentNode.getSUID());
+        System.out.println("removeFromHiddenParents: " + netRow.getList("Evolvo-hidden-parents", Long.class));
+    }
+
+    private static void removeFromHiddenParents(final CyNetwork net, final CyNode parentNode) {
+        final CyRow netRow = net.getDefaultNetworkTable().getRow(net.getSUID());
+        final List<Long> hiddenParents = netRow.getList("Evolvo-hidden-parents", Long.class);
+        hiddenParents.remove(parentNode.getSUID());
+        System.out.println("addToHiddenParents: " + netRow.getList("Evolvo-hidden-parents", Long.class));
     }
 
     private static class ExpandTask implements Task {
@@ -353,7 +395,9 @@ public class CyActivator extends AbstractCyActivator {
             if (replaceParentNode(net)) {
                 net.removeEdges(net.getAdjacentEdgeList(node, CyEdge.Type.ANY));
                 net.removeNodes(Collections.singleton(node));
+                addToHiddenParents(net, node);
             }
+
             eventHelper.flushPayloadEvents();
 
             System.out.println();
@@ -404,6 +448,8 @@ public class CyActivator extends AbstractCyActivator {
                 for (final CyEdge edge : rootnet.getAdjacentEdgeIterable(parentNode, CyEdge.Type.ANY))
                     if (subnet.containsNode(edge.getSource()) && subnet.containsNode(edge.getTarget()))
                         subnet.addEdge(edge);
+
+                removeFromHiddenParents(net, parentNode);
             }
 
             Attr(net, parentNode, "Evolvo-expanded").set(false);
