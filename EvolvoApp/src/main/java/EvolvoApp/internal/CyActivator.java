@@ -104,6 +104,19 @@ public class CyActivator extends AbstractCyActivator {
         return props;
     }
 
+    private static enum EvolvoAction {
+        REPLACE,
+        AUGMENT;
+
+        public static EvolvoAction get(final CyNetwork net) {
+            final String actionName = Attr(net, "Evolvo-action").Str();
+            for (final EvolvoAction action : EvolvoAction.values())
+                if (actionName.equalsIgnoreCase(action.name()))
+                    return action;
+            return null;
+        }
+    }
+
     public void start(BundleContext bc) {
         netFct = getService(bc, CyNetworkFactory.class);
         netMgr = getService(bc, CyNetworkManager.class);
@@ -132,7 +145,12 @@ public class CyActivator extends AbstractCyActivator {
 
         registerService(bc, new NodeViewTaskFactory() {
             public TaskIterator createTaskIterator(View<CyNode> nodeView, CyNetworkView netView) {
-                final TaskIterator taskIterator = new TaskIterator(new ExpandTask(nodeView, netView));
+                final TaskIterator taskIterator = new TaskIterator();
+                if (EvolvoAction.get(netView.getModel()).equals(EvolvoAction.REPLACE)) {
+                    taskIterator.append(new ReplaceExpandTask(nodeView, netView));
+                } else {
+                    taskIterator.append(new AugmentExpandTask(nodeView, netView));
+                }
                 taskIterator.append(new LayoutTask(netView, taskIterator));
                 return taskIterator;
             }
@@ -148,7 +166,12 @@ public class CyActivator extends AbstractCyActivator {
 
         registerService(bc, new NodeViewTaskFactory() {
             public TaskIterator createTaskIterator(View<CyNode> nodeView, CyNetworkView netView) {
-                final TaskIterator taskIterator = new TaskIterator(new CollapseTask(nodeView, netView, true));
+                final TaskIterator taskIterator = new TaskIterator();
+                if (EvolvoAction.get(netView.getModel()).equals(EvolvoAction.REPLACE)) {
+                    taskIterator.append(new ReplaceCollapseTask(nodeView, netView, true));
+                } else {
+                    taskIterator.append(new AugmentCollapseTask(nodeView, netView, true));
+                }
                 taskIterator.append(new LayoutTask(netView, taskIterator));
                 return taskIterator;
             }
@@ -164,7 +187,12 @@ public class CyActivator extends AbstractCyActivator {
 
         registerService(bc, new NodeViewTaskFactory() {
             public TaskIterator createTaskIterator(View<CyNode> nodeView, CyNetworkView netView) {
-                final TaskIterator taskIterator = new TaskIterator(new CollapseTask(nodeView, netView, false));
+                final TaskIterator taskIterator = new TaskIterator();
+                if (EvolvoAction.get(netView.getModel()).equals(EvolvoAction.REPLACE)) {
+                    taskIterator.append(new ReplaceCollapseTask(nodeView, netView, false));
+                } else {
+                    taskIterator.append(new AugmentCollapseTask(nodeView, netView, false));
+                }
                 taskIterator.append(new LayoutTask(netView, taskIterator));
                 return taskIterator;
             }
@@ -189,7 +217,7 @@ public class CyActivator extends AbstractCyActivator {
         }
 
         @Tunable(description="URL")
-        public String url = "http://localhost:8000/replace";
+        public String url = "http://localhost:8000/augment";
 
         public void run(final TaskMonitor monitor) throws Exception {
             final URLConnection urlconn = (new URL(url)).openConnection();
@@ -226,12 +254,16 @@ public class CyActivator extends AbstractCyActivator {
         if (net.getDefaultNodeTable().getColumn("expandable") != null) {
             expandable = Attr(net, node, "expandable").Bool(false);
         }
-        final boolean expanded = Attr(net, node, "expanded").Bool(false);
+        final boolean expanded = Attr(net, node, "Evolvo-expanded").Bool(false);
         return (expandable && !expanded);
     }
 
     private static boolean isCollapsable(final CyNetwork net, final CyNode node) {
-        return Attr(net, node, "Evolvo-parent").Long() != null;
+        if (EvolvoAction.get(net).equals(EvolvoAction.REPLACE)) {
+            return Attr(net, node, "Evolvo-parent").Long() != null;
+        } else {
+            return Attr(net, node, "Evolvo-expanded").Bool(false);
+        }
     }
 
     private static class LayoutTask implements Task {
@@ -351,10 +383,6 @@ public class CyActivator extends AbstractCyActivator {
         reader.close();
     }
 
-    private static boolean replaceParentNode(final CyNetwork net) {
-        return "replace".equals(Attr(net, "Evolvo-action").Str());
-    }
-
     private static void addToHiddenParents(final CyNetwork net, final CyNode parentNode) {
         final CyRow netRow = net.getRow(net);
         final List<Long> hiddenParents = netRow.getList("Evolvo-hidden-parents", Long.class);
@@ -369,11 +397,11 @@ public class CyActivator extends AbstractCyActivator {
         System.out.println("addToHiddenParents: " + netRow.getList("Evolvo-hidden-parents", Long.class));
     }
 
-    private static class ExpandTask implements Task {
+    private static class ReplaceExpandTask implements Task {
         final View<CyNode> nodeView;
         final CyNetworkView netView;
 
-        public ExpandTask(View<CyNode> nodeView, CyNetworkView netView) {
+        public ReplaceExpandTask(View<CyNode> nodeView, CyNetworkView netView) {
             this.nodeView = nodeView;
             this.netView = netView;
         }
@@ -392,28 +420,59 @@ public class CyActivator extends AbstractCyActivator {
 
             Attr(net, node, "Evolvo-expanded").set(true);
 
-            if (replaceParentNode(net)) {
-                net.removeEdges(net.getAdjacentEdgeList(node, CyEdge.Type.ANY));
-                net.removeNodes(Collections.singleton(node));
-                addToHiddenParents(net, node);
-            }
+            net.removeEdges(net.getAdjacentEdgeList(node, CyEdge.Type.ANY));
+            net.removeNodes(Collections.singleton(node));
+            addToHiddenParents(net, node);
 
             eventHelper.flushPayloadEvents();
 
             System.out.println();
-            System.out.println("ExpandTask: " + children.size());
+            System.out.println("ReplaceExpandTask: " + children.size());
             dumpNet(net);
         }
 
         public void cancel() {}
     }
 
-    private static class CollapseTask implements Task {
+    private static class AugmentExpandTask implements Task {
+        final View<CyNode> nodeView;
+        final CyNetworkView netView;
+
+        public AugmentExpandTask(View<CyNode> nodeView, CyNetworkView netView) {
+            this.nodeView = nodeView;
+            this.netView = netView;
+        }
+
+        public void run(final TaskMonitor monitor) throws Exception {
+            final CyNetwork     net     = netView.getModel();
+            final CySubNetwork  subnet  = (CySubNetwork) net;
+            final CyRootNetwork rootnet = subnet.getRootNetwork();
+            final CyNode        node    = nodeView.getModel();
+
+            final Set<CyNode> children = Utils.getNodesWithValue(rootnet, net.getDefaultNodeTable(), "Evolvo-parent", node.getSUID());
+            if (children.size() == 0)
+                expandFromURL(net, node);
+            else
+                expandFromRootNetwork(net, node);
+
+            Attr(net, node, "Evolvo-expanded").set(true);
+
+            eventHelper.flushPayloadEvents();
+
+            System.out.println();
+            System.out.println("ReplaceExpandTask: " + children.size());
+            dumpNet(net);
+        }
+
+        public void cancel() {}
+    }
+
+    private static class ReplaceCollapseTask implements Task {
         final View<CyNode> nodeView;
         final CyNetworkView netView;
         final boolean clear;
 
-        public CollapseTask(View<CyNode> nodeView, CyNetworkView netView, boolean clear) {
+        public ReplaceCollapseTask(View<CyNode> nodeView, CyNetworkView netView, boolean clear) {
             this.nodeView = nodeView;
             this.netView = netView;
             this.clear = clear;
@@ -440,16 +499,56 @@ public class CyActivator extends AbstractCyActivator {
 
             final CyNode parentNode = rootnet.getNode(parentSUID);
 
-            if (replaceParentNode(net)) {
-                // add the parent from the root network back into the subnetwork
-                subnet.addNode(parentNode);
+            // add the parent from the root network back into the subnetwork
+            subnet.addNode(parentNode);
 
-                // add parent node's edges back into subnetwork
-                for (final CyEdge edge : rootnet.getAdjacentEdgeIterable(parentNode, CyEdge.Type.ANY))
-                    if (subnet.containsNode(edge.getSource()) && subnet.containsNode(edge.getTarget()))
-                        subnet.addEdge(edge);
+            // add parent node's edges back into subnetwork
+            for (final CyEdge edge : rootnet.getAdjacentEdgeIterable(parentNode, CyEdge.Type.ANY))
+                if (subnet.containsNode(edge.getSource()) && subnet.containsNode(edge.getTarget()))
+                    subnet.addEdge(edge);
 
-                removeFromHiddenParents(net, parentNode);
+            removeFromHiddenParents(net, parentNode);
+
+            Attr(net, parentNode, "Evolvo-expanded").set(false);
+
+            eventHelper.flushPayloadEvents();
+
+            System.out.println();
+            System.out.println("ReplaceCollapseTask");
+            dumpNet(net);
+        }
+
+        public void cancel() {}
+    }
+
+    private static class AugmentCollapseTask implements Task {
+        final View<CyNode> nodeView;
+        final CyNetworkView netView;
+        final boolean clear;
+
+        public AugmentCollapseTask(View<CyNode> nodeView, CyNetworkView netView, boolean clear) {
+            this.nodeView = nodeView;
+            this.netView = netView;
+            this.clear = clear;
+        }
+
+        public void run(final TaskMonitor monitor) throws Exception {
+            final CyNetwork     net     = netView.getModel();
+            final CySubNetwork  subnet  = (CySubNetwork) net;
+            final CyRootNetwork rootnet = subnet.getRootNetwork();
+            final CyTable       nodetbl = net.getDefaultNodeTable();
+
+            final CyNode parentNode = nodeView.getModel();
+            final Long parentSUID = parentNode.getSUID();
+            final Set<CyNode> children = Utils.getNodesWithValue(net, nodetbl, "Evolvo-parent", parentSUID);
+
+            // delete the nodes from subnetwork
+            subnet.removeNodes(children);
+
+            if (clear) {
+                // delete all table info
+                nodetbl.deleteRows(Utils.toSUIDs(children));
+                rootnet.removeNodes(children);
             }
 
             Attr(net, parentNode, "Evolvo-expanded").set(false);
@@ -457,7 +556,7 @@ public class CyActivator extends AbstractCyActivator {
             eventHelper.flushPayloadEvents();
 
             System.out.println();
-            System.out.println("CollapseTask");
+            System.out.println("AugmentCollapseTask");
             dumpNet(net);
         }
 
