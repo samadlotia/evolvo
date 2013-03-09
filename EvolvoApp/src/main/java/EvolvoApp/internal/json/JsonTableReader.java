@@ -14,6 +14,11 @@ import org.codehaus.jackson.JsonLocation;
 import org.codehaus.jackson.JsonToken;
 import org.codehaus.jackson.JsonParseException;
 
+/**
+ * Reads a table specified in JSON.
+ * This is completely independent of {@code CyTable}s and
+ * should not be confused with it.
+ */
 class JsonTableReader {
     public static interface Delegate {
         public void header(String[] cols) throws InvalidJsonException;
