@@ -54,7 +54,7 @@ Notes:
  - Cell values:
     - The values of an entire column must all have the same type.
     - Except for the header, cell values can be null.
-    - Besides strings and booleans, cell values can be whole numbers and decimal values.
+    - Besides strings and booleans, cell values can be whole numbers and floating numbers.
     - Cell values cannot be arrays or objects.
 
 Some edges
@@ -89,5 +89,9 @@ Notes:
    node in the table has index 0; the second has index 1; etc. Note that the first
    node does *not* have index 1, because the header column is not included in the index
    range.
+ - The source and target column values must always be whole numbers. Null values
+   are not accepted. They must refer to node indices.
  - The columns "Source" and "Target" and not created. The names of
    the first two columns are always ignored. But they cannot be null or empty strings.
+ - Edges can have attributes just like nodes. In this case, edges just have a single attribute,
+   *Years working together* with a floating number type.
