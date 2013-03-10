@@ -40,7 +40,7 @@ There are no edges in the network nor any network attributes.
         ["Kristina"  , true     , "Sweden"],
         ["Anders"    , true     , "Michigan"],
         ["Justin"    , false    , "Central California"],
-        ["Samad"     , false    , "South Bay"],
+        ["Samad"     , false    , "South Bay"]
       ],
       [], // an empty table of edges
       []  // an empty table of network attributes
@@ -70,14 +70,14 @@ and everyone else.
         ["Kristina"  , true     , "Sweden"            ], // index 1
         ["Anders"    , true     , "Michigan"          ], // index 2
         ["Justin"    , false    , "Central California"], // index 3
-        ["Samad"     , false    , "South Bay"         ], // index 4
+        ["Samad"     , false    , "South Bay"         ]  // index 4
       ],
       [
         ["Source", "Target", "Years working together"],
         [0       , 1       , 8.0                     ],
         [2       , 0       , 0.2                     ],
         [0       , 3       , 0.8                     ],
-        [4       , 0       , 0.8                     ],
+        [4       , 0       , 0.8                     ]
       ],
       []
     ]
@@ -95,3 +95,33 @@ Notes:
    the first two columns are always ignored. But they cannot be null or empty strings.
  - Edges can have attributes just like nodes. In this case, edges just have a single attribute,
    *Years working together* with a floating number type.
+
+Network Attributes
+------------------
+We extend our example above to include network attributes.
+
+    [
+      [
+        ["Name"      , "Married", "Origin"            ],
+        ["Alex"      , false    , "East Bay"          ],
+        ["Kristina"  , true     , "Sweden"            ],
+        ["Anders"    , true     , "Michigan"          ],
+        ["Justin"    , false    , "Central California"],
+        ["Samad"     , false    , "South Bay"         ]
+      ],
+      [
+        ["Source", "Target", "Years working together"],
+        [0       , 1       , 8.0                     ],
+        [2       , 0       , 0.2                     ],
+        [0       , 3       , 0.8                     ],
+        [4       , 0       , 0.8                     ]
+      ],
+      [
+        ["Network type", "Principal Investigator"],
+        ["Colleagues"  , "Alex"                  ]
+      ]
+    ]
+
+Notes:
+ - Network attributes should only have a single row.
+   This is because there is only one network.
